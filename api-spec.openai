@@ -1,0 +1,483 @@
+openapi: 3.0.3
+info:
+  title: Personal WhatsApp API with Scheduling
+  description: A personal WhatsApp API server with scheduled messaging capabilities for birthday reminders, regular check-ins, and automated notifications.
+  version: 1.0.0
+  contact:
+    name: Personal WhatsApp API
+  license:
+    name: MIT
+
+servers:
+  - url: https://your-app.railway.app
+    description: Production server
+  - url: http://localhost:3000
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      summary: Get connection status
+      description: Returns the current WhatsApp connection status and system information
+      operationId: getHealth
+      tags:
+        - System
+      responses:
+        '200':
+          description: System status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [connected, disconnected]
+                    description: WhatsApp connection status
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Current timestamp
+                  scheduledMessages:
+                    type: integer
+                    description: Total number of scheduled messages
+                  activeJobs:
+                    type: integer
+                    description: Number of active cron jobs
+              example:
+                status: "connected"
+                timestamp: "2024-01-15T10:30:00Z"
+                scheduledMessages: 3
+                activeJobs: 2
+
+  /qr:
+    get:
+      summary: Get QR code for WhatsApp authentication
+      description: Returns QR code data and image for linking WhatsApp account
+      operationId: getQRCode
+      tags:
+        - Authentication
+      responses:
+        '200':
+          description: QR code data or status
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                      qr:
+                        type: string
+                        description: QR code string data
+                      qrImage:
+                        type: string
+                        description: Base64 encoded QR code image
+                  - type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: false
+                      message:
+                        type: string
+                        examples:
+                          - "Already authenticated"
+                          - "QR code not available yet, please wait..."
+
+  /send:
+    post:
+      summary: Send immediate WhatsApp message
+      description: Sends a WhatsApp message immediately to the specified number
+      operationId: sendMessage
+      tags:
+        - Messaging
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+                - message
+              properties:
+                number:
+                  type: string
+                  description: Phone number without country code prefix
+                  example: "1234567890"
+                message:
+                  type: string
+                  description: Message content to send
+                  example: "Hello from my API!"
+      responses:
+        '200':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Message sent successfully"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: WhatsApp not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /scheduled:
+    get:
+      summary: Get all scheduled messages
+      description: Returns a list of all scheduled messages
+      operationId: getScheduledMessages
+      tags:
+        - Scheduled Messages
+      responses:
+        '200':
+          description: List of scheduled messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  scheduledMessages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScheduledMessage'
+
+    post:
+      summary: Create scheduled message
+      description: Creates a new scheduled message with cron schedule
+      operationId: createScheduledMessage
+      tags:
+        - Scheduled Messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+                - message
+                - schedule
+              properties:
+                number:
+                  type: string
+                  description: Phone number without country code prefix
+                  example: "1234567890"
+                message:
+                  type: string
+                  description: Message content to send
+                  example: "Happy Monday!"
+                schedule:
+                  type: string
+                  description: Cron schedule expression
+                  example: "0 9 * * 1"
+                description:
+                  type: string
+                  description: Optional description of the scheduled message
+                  example: "Weekly Monday greeting"
+                oneTime:
+                  type: boolean
+                  description: Whether this is a one-time message (deactivates after sending)
+                  default: false
+      responses:
+        '200':
+          description: Scheduled message created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Scheduled message created"
+                  scheduledMessage:
+                    $ref: '#/components/schemas/ScheduledMessage'
+        '400':
+          description: Invalid request or cron schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /scheduled/{id}:
+    put:
+      summary: Update scheduled message
+      description: Updates an existing scheduled message
+      operationId: updateScheduledMessage
+      tags:
+        - Scheduled Messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scheduled message ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                number:
+                  type: string
+                  description: Phone number
+                message:
+                  type: string
+                  description: Message content
+                schedule:
+                  type: string
+                  description: Cron schedule expression
+                description:
+                  type: string
+                  description: Message description
+                oneTime:
+                  type: boolean
+                  description: One-time message flag
+                active:
+                  type: boolean
+                  description: Active status
+      responses:
+        '200':
+          description: Scheduled message updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Scheduled message updated"
+                  scheduledMessage:
+                    $ref: '#/components/schemas/ScheduledMessage'
+        '404':
+          description: Scheduled message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete scheduled message
+      description: Deletes a scheduled message permanently
+      operationId: deleteScheduledMessage
+      tags:
+        - Scheduled Messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scheduled message ID
+      responses:
+        '200':
+          description: Scheduled message deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Scheduled message deleted"
+        '404':
+          description: Scheduled message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /scheduled/{id}/toggle:
+    post:
+      summary: Toggle scheduled message active status
+      description: Activates or deactivates a scheduled message
+      operationId: toggleScheduledMessage
+      tags:
+        - Scheduled Messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Scheduled message ID
+      responses:
+        '200':
+          description: Scheduled message toggled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Scheduled message activated"
+                  scheduledMessage:
+                    $ref: '#/components/schemas/ScheduledMessage'
+        '404':
+          description: Scheduled message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /restart:
+    post:
+      summary: Restart WhatsApp session
+      description: Restarts the WhatsApp connection (may require re-authentication)
+      operationId: restartSession
+      tags:
+        - System
+      responses:
+        '200':
+          description: Restart initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "WhatsApp session restart initiated"
+        '500':
+          description: Failed to restart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /schedule-examples:
+    get:
+      summary: Get cron schedule examples
+      description: Returns common cron schedule patterns and formatting help
+      operationId: getScheduleExamples
+      tags:
+        - Utilities
+      responses:
+        '200':
+          description: Schedule examples and format information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  examples:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      "Every day at 9 AM": "0 9 * * *"
+                      "Every Monday at 10 AM": "0 10 * * 1"
+                      "Every Friday at 5 PM": "0 17 * * 5"
+                  format:
+                    type: string
+                    example: "minute hour day month dayOfWeek"
+                  note:
+                    type: string
+                    example: "Use https://crontab.guru to validate your cron expressions"
+
+components:
+  schemas:
+    ScheduledMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique message identifier
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        number:
+          type: string
+          description: Phone number
+          example: "1234567890"
+        message:
+          type: string
+          description: Message content
+          example: "Happy Monday!"
+        schedule:
+          type: string
+          description: Cron schedule expression
+          example: "0 9 * * 1"
+        description:
+          type: string
+          description: Message description
+          example: "Weekly Monday greeting"
+        oneTime:
+          type: boolean
+          description: One-time message flag
+          example: false
+        active:
+          type: boolean
+          description: Whether the message is active
+          example: true
+        created:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updated:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T11:30:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Error message
+          example: "Invalid request parameters"
+
+tags:
+  - name: System
+    description: System status and health endpoints
+  - name: Authentication
+    description: WhatsApp authentication and QR code endpoints
+  - name: Messaging
+    description: Immediate message sending
+  - name: Scheduled Messages
+    description: Scheduled message management
+  - name: Utilities
+    description: Helper endpoints and examples
