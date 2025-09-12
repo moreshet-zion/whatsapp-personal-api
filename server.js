@@ -69,26 +69,12 @@ function initializeClient() {
         }),
         puppeteer: {
             headless: true,
-            timeout: 60000, // Increase timeout to 60 seconds
+            timeout: 60000,
             args: [
                 '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-extensions',
-                '--disable-plugins',
-                '--disable-default-apps',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding'
+                '--disable-setuid-sandbox'
             ],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || chromeExecutable || undefined
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || chromeExecutable
         }
     });
 
@@ -136,13 +122,6 @@ function initializeClient() {
         console.error('Failed to initialize WhatsApp client:', error);
         console.error('This might be due to Chrome/Chromium not being found or accessible.');
         console.error('Try installing Chrome or setting PUPPETEER_EXECUTABLE_PATH environment variable.');
-        
-        // Retry initialization after a delay
-        console.log('Retrying initialization in 5 seconds...');
-        setTimeout(() => {
-            console.log('Attempting to reinitialize WhatsApp client...');
-            initializeClient();
-        }, 5000);
     });
 }
 
@@ -550,12 +529,8 @@ process.on('SIGINT', async () => {
     
     stopAllCronJobs();
     
-    if (client && client.pupBrowser) {
-        try {
-            await client.destroy();
-        } catch (error) {
-            console.error('Error during client cleanup:', error.message);
-        }
+    if (client) {
+        await client.destroy();
     }
     
     process.exit(0);
@@ -566,12 +541,8 @@ process.on('SIGTERM', async () => {
     
     stopAllCronJobs();
     
-    if (client && client.pupBrowser) {
-        try {
-            await client.destroy();
-        } catch (error) {
-            console.error('Error during client cleanup:', error.message);
-        }
+    if (client) {
+        await client.destroy();
     }
     
     process.exit(0);
