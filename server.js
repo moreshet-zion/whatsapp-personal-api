@@ -6,6 +6,7 @@ const cron = require('node-cron');
 const fs = require('fs-extra');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const { findChromeExecutable } = require('./chrome-check');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,12 +53,23 @@ async function saveScheduledMessages() {
 
 // Initialize WhatsApp client
 function initializeClient() {
+    console.log('Initializing WhatsApp client...');
+    
+    // Find Chrome executable
+    const chromeExecutable = findChromeExecutable();
+    if (chromeExecutable) {
+        console.log(`Using Chrome at: ${chromeExecutable}`);
+    } else {
+        console.log('Using Puppeteer bundled Chromium');
+    }
+
     client = new Client({
         authStrategy: new LocalAuth({
             dataPath: path.join(__dirname, 'whatsapp_session')
         }),
         puppeteer: {
             headless: true,
+            timeout: 60000, // Increase timeout to 60 seconds
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -66,8 +78,17 @@ function initializeClient() {
                 '--no-first-run',
                 '--no-zygote',
                 '--single-process',
-                '--disable-gpu'
-            ]
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-default-apps',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
+            ],
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || chromeExecutable || undefined
         }
     });
 
@@ -106,7 +127,23 @@ function initializeClient() {
         stopAllCronJobs();
     });
 
-    client.initialize();
+    client.on('loading_screen', (percent, message) => {
+        console.log('Loading screen:', percent, message);
+    });
+
+    // Add error handling for initialization
+    client.initialize().catch(error => {
+        console.error('Failed to initialize WhatsApp client:', error);
+        console.error('This might be due to Chrome/Chromium not being found or accessible.');
+        console.error('Try installing Chrome or setting PUPPETEER_EXECUTABLE_PATH environment variable.');
+        
+        // Retry initialization after a delay
+        console.log('Retrying initialization in 5 seconds...');
+        setTimeout(() => {
+            console.log('Attempting to reinitialize WhatsApp client...');
+            initializeClient();
+        }, 5000);
+    });
 }
 
 // Cron job management
@@ -513,8 +550,12 @@ process.on('SIGINT', async () => {
     
     stopAllCronJobs();
     
-    if (client) {
-        await client.destroy();
+    if (client && client.pupBrowser) {
+        try {
+            await client.destroy();
+        } catch (error) {
+            console.error('Error during client cleanup:', error.message);
+        }
     }
     
     process.exit(0);
@@ -525,8 +566,12 @@ process.on('SIGTERM', async () => {
     
     stopAllCronJobs();
     
-    if (client) {
-        await client.destroy();
+    if (client && client.pupBrowser) {
+        try {
+            await client.destroy();
+        } catch (error) {
+            console.error('Error during client cleanup:', error.message);
+        }
     }
     
     process.exit(0);

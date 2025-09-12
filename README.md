@@ -270,23 +270,33 @@ async function scheduleMessage(number, message, schedule, description) {
 
 ### Common Issues
 
-1. **QR Code not showing:**
+1. **Chrome/Puppeteer timeout errors:**
+   - Run `npm run check-chrome` to test Chrome configuration
+   - Ensure Chrome or Chromium is installed on your system
+   - The app automatically detects Chrome installation
+   - If issues persist, set `PUPPETEER_EXECUTABLE_PATH` environment variable
+
+2. **QR Code not showing:**
    - Wait a few seconds after starting the server
    - Visit `/qr` endpoint again
    - Check server logs for errors
 
-2. **Messages not sending:**
+3. **Messages not sending:**
    - Check `/health` endpoint - ensure status is "connected"
    - Verify phone number format (no country code, just digits)
    - Check WhatsApp connection on your phone
 
-3. **Scheduled messages not working:**
+4. **Scheduled messages not working:**
    - Verify cron expression at [crontab.guru](https://crontab.guru)
    - Check if message is active: `GET /scheduled`
    - Ensure WhatsApp is connected when schedule triggers
 
-4. **Railway deployment issues:**
-   - Check build logs in Railway dashboard
+5. **Port already in use:**
+   - Kill existing processes: `pkill -f "node server.js"`
+   - Or use a different port: `PORT=3001 npm start`
+
+6. **Deployment issues:**
+   - Check build logs in deployment platform dashboard
    - Ensure all files are committed to Git
    - Verify `package.json` has correct start script
 
