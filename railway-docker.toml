@@ -1,0 +1,11 @@
+# Alternative Railway config for Docker deployment
+# Rename this to railway.toml if you want to use Docker instead of Nixpacks
+
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

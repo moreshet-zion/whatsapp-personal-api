@@ -1,0 +1,89 @@
+### WhatsApp Personal API - Example Requests
+### Replace YOUR_BASE_URL with your actual URL (local: http://localhost:3000, Railway: https://your-app.railway.app)
+
+@baseUrl = http://localhost:3000
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Get QR Code for Authentication
+GET {{baseUrl}}/qr
+
+### Send Immediate Message
+POST {{baseUrl}}/send
+Content-Type: application/json
+
+{
+  "number": "1234567890",
+  "message": "Hello from my personal WhatsApp API! 🚀"
+}
+
+### Create Daily Morning Greeting
+POST {{baseUrl}}/scheduled
+Content-Type: application/json
+
+{
+  "number": "1234567890",
+  "message": "Good morning! Have a wonderful day! ☀️",
+  "schedule": "0 8 * * *",
+  "description": "Daily morning greeting"
+}
+
+### Create Weekly Monday Check-in
+POST {{baseUrl}}/scheduled
+Content-Type: application/json
+
+{
+  "number": "1234567890",
+  "message": "Hey! How was your weekend? Hope you have a great week ahead! 😊",
+  "schedule": "0 10 * * 1",
+  "description": "Weekly Monday check-in"
+}
+
+### Create Birthday Reminder (March 15th at 9 AM)
+POST {{baseUrl}}/scheduled
+Content-Type: application/json
+
+{
+  "number": "1234567890",
+  "message": "🎉 Happy Birthday! Hope you have an amazing day full of joy and celebration! 🎂🎈",
+  "schedule": "0 9 15 3 *",
+  "description": "Birthday reminder - March 15th"
+}
+
+### Create One-time Meeting Reminder
+POST {{baseUrl}}/scheduled
+Content-Type: application/json
+
+{
+  "number": "1234567890",
+  "message": "⏰ Reminder: Don't forget about the important meeting at 3 PM today!",
+  "schedule": "0 14 25 12 *",
+  "description": "One-time meeting reminder",
+  "oneTime": true
+}
+
+### Get All Scheduled Messages
+GET {{baseUrl}}/scheduled
+
+### Update a Scheduled Message (replace MESSAGE_ID with actual ID)
+PUT {{baseUrl}}/scheduled/MESSAGE_ID
+Content-Type: application/json
+
+{
+  "message": "Updated message: Good morning! Today is going to be amazing! ✨",
+  "schedule": "0 9 * * *",
+  "description": "Updated daily morning greeting"
+}
+
+### Toggle Scheduled Message (pause/resume)
+POST {{baseUrl}}/scheduled/MESSAGE_ID/toggle
+
+### Delete Scheduled Message
+DELETE {{baseUrl}}/scheduled/MESSAGE_ID
+
+### Get Schedule Examples
+GET {{baseUrl}}/schedule-examples
+
+### Restart WhatsApp Session
+POST {{baseUrl}}/restart
