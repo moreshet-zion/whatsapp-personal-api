@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: whatsapp-personal-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
