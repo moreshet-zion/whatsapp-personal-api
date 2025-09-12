@@ -3,9 +3,10 @@
 
 FROM node:18-slim
 
-# Install Chrome dependencies
+# Install minimal dependencies for Puppeteer's bundled Chromium
 RUN apt-get update && apt-get install -y \
-    chromium \
+    curl \
+    ca-certificates \
     fonts-liberation \
     libappindicator3-1 \
     libasound2 \
@@ -20,11 +21,10 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     xdg-utils \
     libxss1 \
-    libgconf-2-4 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Chrome path for Puppeteer
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Let Puppeteer download and use its bundled Chromium for better compatibility
+# No PUPPETEER_EXECUTABLE_PATH or PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
 
 # Create app directory
 WORKDIR /app

@@ -54,14 +54,7 @@ async function saveScheduledMessages() {
 // Initialize WhatsApp client
 function initializeClient() {
     console.log('Initializing WhatsApp client...');
-    
-    // Find Chrome executable
-    const chromeExecutable = findChromeExecutable();
-    if (chromeExecutable) {
-        console.log(`Using Chrome at: ${chromeExecutable}`);
-    } else {
-        console.log('Using Puppeteer bundled Chromium');
-    }
+    console.log('Using Puppeteer bundled Chromium for better compatibility');
 
     client = new Client({
         authStrategy: new LocalAuth({
@@ -72,9 +65,12 @@ function initializeClient() {
             timeout: 60000,
             args: [
                 '--no-sandbox',
-                '--disable-setuid-sandbox'
-            ],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || chromeExecutable
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ]
+            // Let Puppeteer use its bundled Chromium for better compatibility
+            // executablePath is intentionally omitted
         }
     });
 
@@ -120,8 +116,8 @@ function initializeClient() {
     // Add error handling for initialization
     client.initialize().catch(error => {
         console.error('Failed to initialize WhatsApp client:', error);
-        console.error('This might be due to Chrome/Chromium not being found or accessible.');
-        console.error('Try installing Chrome or setting PUPPETEER_EXECUTABLE_PATH environment variable.');
+        console.error('This might be due to Puppeteer/Chromium initialization issues.');
+        console.error('Check if all required dependencies are installed.');
     });
 }
 
