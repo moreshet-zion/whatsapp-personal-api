@@ -22,6 +22,9 @@ let qrCodeData = null;
 let isReady = false;
 let scheduledMessages = [];
 let activeCronJobs = new Map();
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const INITIAL_BACKOFF_MS = 5000; // 5 seconds
 
 // Data storage paths
 const DATA_DIR = path.join(__dirname, 'data');
@@ -43,6 +46,35 @@ async function completeSetup() {
         console.log('✅ Setup complete! Flag file created at:', SETUP_FLAG_FILE);
     } catch (error) {
         console.error('Error creating setup complete flag:', error);
+    }
+}
+
+// Sends a message with a random "human-like" delay to avoid rate-limiting.
+async function sendMessageWithJitter(chatId, message) {
+    const jitter = Math.floor(Math.random() * 4000) + 1000; // Jitter between 1-5 seconds
+    console.log(`Sending message with a ${jitter / 1000}s delay...`);
+    return new Promise(resolve => {
+        setTimeout(async () => {
+            const result = await client.sendMessage(chatId, message);
+            resolve(result);
+        }, jitter);
+    });
+}
+
+// Deletes the session and setup flag to force a clean re-authentication.
+async function resetSessionAndExit() {
+    console.error('Session is unrecoverable. Deleting session data to force re-authentication.');
+    try {
+        const sessionPath = path.join(__dirname, 'whatsapp_session');
+        await Promise.all([
+            fs.remove(sessionPath),
+            fs.remove(SETUP_FLAG_FILE)
+        ]);
+        console.log('Session data and setup flag deleted. The app will restart and require a new QR scan.');
+        process.exit(1); // Exit to allow Fly.io to restart the process cleanly.
+    } catch (error) {
+        console.error('Error during session cleanup:', error);
+        process.exit(1);
     }
 }
 
@@ -84,10 +116,11 @@ function initializeClient() {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu'
-            ]
-            // Let Puppeteer use its bundled Chromium for better compatibility
-            // executablePath is intentionally omitted
+                '--disable-gpu',
+                '--window-size=1920,1080' // Set a standard window size
+            ],
+            // Setting a common user agent helps avoid basic headless detection
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
         }
     });
 
@@ -110,6 +143,7 @@ function initializeClient() {
         console.log('WhatsApp Client is ready!');
         isReady = true;
         qrCodeData = null;
+        reconnectAttempts = 0; // Reset backoff counter on a successful connection
         
         // If this was the first run, mark setup as complete
         if (!(await isSetupComplete())) {
@@ -131,10 +165,28 @@ function initializeClient() {
         qrCodeData = null;
     });
 
-    client.on('disconnected', (reason) => {
+    client.on('disconnected', async (reason) => {
         console.log('WhatsApp Client disconnected:', reason);
         isReady = false;
         stopAllCronJobs();
+
+        // Self-healing: If the session is unrecoverable, reset the app.
+        if (reason === 'LOGGED_OUT' || reason === 'NAVIGATION') {
+            await resetSessionAndExit();
+        } 
+        // Implement exponential backoff for other, possibly temporary, disconnects
+        else if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            const backoffTime = INITIAL_BACKOFF_MS * Math.pow(2, reconnectAttempts);
+            reconnectAttempts++;
+            console.log(`Connection lost. Reconnecting in ${backoffTime / 1000}s... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+            
+            setTimeout(() => {
+                client.initialize().catch(err => console.error(`Reconnect attempt ${reconnectAttempts} failed:`, err));
+            }, backoffTime);
+        } else {
+            console.error('Maximum reconnect attempts reached. Assuming session is unrecoverable.');
+            await resetSessionAndExit();
+        }
     });
 
     client.on('loading_screen', (percent, message) => {
@@ -163,7 +215,7 @@ function createCronJob(scheduledMessage) {
 
         try {
             const chatId = `${scheduledMessage.number}@c.us`;
-            await client.sendMessage(chatId, scheduledMessage.message);
+            await sendMessageWithJitter(chatId, scheduledMessage.message);
             console.log(`Scheduled message sent to ${scheduledMessage.number}: ${scheduledMessage.message}`);
 
             // If it's a one-time message, deactivate it
@@ -215,10 +267,18 @@ function startScheduledMessages() {
 
 // API Routes
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check with more detailed state information
+app.get('/health', async (req, res) => {
+    let whatsappState = 'DISCONNECTED';
+    try {
+        // This can throw an error if the client is not yet initialized
+        whatsappState = await client.getState();
+    } catch {
+        whatsappState = 'INITIALIZING';
+    }
     res.json({
         status: isReady ? 'connected' : 'disconnected',
+        whatsapp_state: whatsappState,
         timestamp: new Date().toISOString(),
         scheduledMessages: scheduledMessages.length,
         activeJobs: activeCronJobs.size
@@ -276,7 +336,7 @@ app.post('/send', async (req, res) => {
 
     try {
         const chatId = `${number}@c.us`;
-        await client.sendMessage(chatId, message);
+        await sendMessageWithJitter(chatId, message);
         
         res.json({
             success: true,
