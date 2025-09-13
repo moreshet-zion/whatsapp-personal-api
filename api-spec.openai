@@ -9,8 +9,8 @@ info:
     name: MIT
 
 servers:
-  - url: https://your-app.railway.app
-    description: Production server
+  - url: https://whatsapp-personal-api.fly.dev
+    description: Production server (Fly.io)
   - url: http://localhost:3000
     description: Local development server
 
