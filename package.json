@@ -27,7 +27,7 @@
     "fly": "^4.6.16",
     "fs-extra": "^11.2.0",
     "node-cron": "^3.0.3",
-    "puppeteer": "^24.20.0",
+    "puppeteer": "~22.10.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "uuid": "^10.0.0",
