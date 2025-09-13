@@ -11,7 +11,6 @@ const { findChromeExecutable } = require('./chrome-check');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SETUP_MODE = process.env.SETUP_MODE === 'true';
 
 // Middleware
 app.use(cors());
@@ -27,9 +26,25 @@ let activeCronJobs = new Map();
 // Data storage paths
 const DATA_DIR = path.join(__dirname, 'data');
 const SCHEDULED_MESSAGES_FILE = path.join(DATA_DIR, 'scheduled_messages.json');
+const SETUP_FLAG_FILE = path.join(DATA_DIR, 'setup_complete.flag');
 
 // Ensure data directory exists
 fs.ensureDirSync(DATA_DIR);
+
+// Checks if the setup has been completed by looking for the flag file.
+async function isSetupComplete() {
+    return fs.pathExists(SETUP_FLAG_FILE);
+}
+
+// Marks setup as complete by creating the flag file.
+async function completeSetup() {
+    try {
+        await fs.ensureFile(SETUP_FLAG_FILE);
+        console.log('✅ Setup complete! Flag file created at:', SETUP_FLAG_FILE);
+    } catch (error) {
+        console.error('Error creating setup complete flag:', error);
+    }
+}
 
 // Load scheduled messages from file
 async function loadScheduledMessages() {
@@ -55,13 +70,7 @@ async function saveScheduledMessages() {
 
 // Initialize WhatsApp client
 function initializeClient() {
-    if (SETUP_MODE) {
-        console.log('\n🔧 SETUP MODE: Initializing WhatsApp client for first-time authentication...');
-        console.log('📱 A QR code will be displayed in the terminal for you to scan with WhatsApp');
-        console.log('📲 After scanning, the session will be saved for future headless use\n');
-    } else {
-        console.log('Initializing WhatsApp client...');
-    }
+    console.log('Initializing WhatsApp client...');
     console.log('Using Puppeteer bundled Chromium for better compatibility');
 
     client = new Client({
@@ -69,7 +78,7 @@ function initializeClient() {
             dataPath: path.join(__dirname, 'whatsapp_session')
         }),
         puppeteer: {
-            headless: true,
+            headless: true, // Must be headless in a server environment
             timeout: 60000,
             args: [
                 '--no-sandbox',
@@ -81,51 +90,35 @@ function initializeClient() {
             // executablePath is intentionally omitted
         }
     });
-    console.log('craeted client');
+
     client.on('qr', (qr) => {
-        console.log('QR Code received');
+        console.log('QR Code received. Scan in terminal or via the /qr API endpoint.');
         qrCodeData = qr;
         
-        if (SETUP_MODE) {
-            console.log('\n📱 Scan this QR code with your WhatsApp:');
-            console.log('   1. Open WhatsApp on your phone');
-            console.log('   2. Go to Settings > Linked Devices');
-            console.log('   3. Tap "Link a Device"');
-            console.log('   4. Scan the QR code below:\n');
-            
-            // Print QR code in terminal
-            qrTerminal.generate(qr, { small: true });
-            
-            console.log('\n⏳ Waiting for QR code to be scanned...');
-        } else {
-            // Generate QR code data for API endpoint
-            qrcode.toDataURL(qr, (err, url) => {
-                if (!err) {
-                    console.log('QR Code generated successfully for API endpoint');
-                }
-            });
-        }
+        // Print QR code to terminal for easy scanning from logs
+        qrTerminal.generate(qr, { small: true });
+        
+        // Also generate QR code data for the API endpoint
+        qrcode.toDataURL(qr, (err, url) => {
+            if (!err) {
+                console.log('QR Code data URL generated for API.');
+            }
+        });
     });
 
-    client.on('ready', () => {
-        if (SETUP_MODE) {
-            console.log('\n✅ SUCCESS! WhatsApp has been linked successfully!');
-            console.log('🔐 Session has been saved to whatsapp_session/ directory');
-            console.log('🚀 You can now run the API in headless mode using: npm start');
-            console.log('\n🛑 Setup complete. Exiting setup mode...\n');
-            
-            // Exit after successful setup
-            setTimeout(() => {
-                process.exit(0);
-            }, 2000);
-        } else {
-            console.log('WhatsApp Client is ready!');
-            isReady = true;
-            qrCodeData = null;
-            
-            // Start scheduled messages
-            startScheduledMessages();
+    client.on('ready', async () => {
+        console.log('WhatsApp Client is ready!');
+        isReady = true;
+        qrCodeData = null;
+        
+        // If this was the first run, mark setup as complete
+        if (!(await isSetupComplete())) {
+            await completeSetup();
+            console.log('🚀 First-time setup successful. The app is now fully operational.');
         }
+        
+        // Start scheduled messages
+        startScheduledMessages();
     });
 
     client.on('authenticated', () => {
@@ -540,19 +533,22 @@ app.use((req, res) => {
 // Initialize application
 async function initialize() {
     try {
+        if (!(await isSetupComplete())) {
+            console.log('🔧 First-time setup needed. The app will start and generate a QR code.');
+            console.log('   Scan the QR code in the logs or by visiting the /qr endpoint.');
+        } else {
+            console.log('✅ Setup previously completed. Starting server in normal mode.');
+        }
+
         await loadScheduledMessages();
         initializeClient();
         
-        if (!SETUP_MODE) {
-            // Only start the server in normal mode, not in setup mode
-            app.listen(PORT, () => {
-                console.log(`WhatsApp Personal API server running on port ${PORT}`);
-                console.log(`Health check: http://localhost:${PORT}/health`);
-                console.log(`QR Code: http://localhost:${PORT}/qr`);
-            });
-        } else {
-            console.log('🔧 Setup mode: Server not started, waiting for WhatsApp authentication...');
-        }
+        // The server must always be running to handle API requests, including the QR code endpoint.
+        app.listen(PORT, () => {
+            console.log(`WhatsApp Personal API server running on port ${PORT}`);
+            console.log(`Health check: http://localhost:${PORT}/health`);
+            console.log(`QR Code: http://localhost:${PORT}/qr`);
+        });
     } catch (error) {
         console.error('Failed to initialize application:', error);
         process.exit(1);

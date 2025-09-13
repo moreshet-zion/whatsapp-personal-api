@@ -17,6 +17,10 @@ primary_region = 'fra'
   min_machines_running = 0
   processes = ['app']
 
+[[mounts]]
+  source = "whatsapp_data"
+  destination = "/app/data"
+
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
