@@ -142,11 +142,11 @@ More examples in `docs/TEST_CALLS.md`.
 
 Fly.io (included `fly.toml`)
 ```bash
-fly volumes create whatsapp_sessions -r <region> -s 1
-fly volumes create whatsapp_data -r <region> -s 1
+fly volumes create whatsapp_storage -r <region> -s 1
 fly secrets set API_TOKENS=<your_keys>
 fly deploy
 ```
+Notes: One volume is used at `/data` via `STORAGE_DIR`. It contains `sessions/` and `data/` folders.
 
 Docker
 ```bash
@@ -155,8 +155,8 @@ docker build -t whatsapp-personal-api .
 # Run (map volumes to persist sessions/data)
 docker run -p 3000:8080 \
   -e API_TOKENS=<your_keys> \
-  -v $(pwd)/sessions:/app/sessions \
-  -v $(pwd)/data:/app/data \
+  -e STORAGE_DIR=/data \
+  -v $(pwd)/storage:/data \
   whatsapp-personal-api
 ```
 

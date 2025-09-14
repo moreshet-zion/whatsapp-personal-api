@@ -10,6 +10,7 @@ primary_region = "fra"
 [env]
   NODE_ENV = "production"
   PORT = "8080"
+  STORAGE_DIR = "/data"
 
 [http_service]
   internal_port = 8080
@@ -37,18 +38,13 @@ primary_region = "fra"
   cpus = 1
   memory = "256mb"
 
-# Persist WhatsApp sessions and scheduled data across restarts
-# Create volumes before first deploy:
-#   fly volumes create whatsapp_sessions -r <region> -s 1
-#   fly volumes create whatsapp_data -r <region> -s 1
+# Persist data in a single volume mounted at /data
+# Create volume before first deploy:
+#   fly volumes create whatsapp_storage -r <region> -s 1
 
 [[mounts]]
-  source = "whatsapp_sessions"
-  destination = "/app/sessions"
-
-[[mounts]]
-  source = "whatsapp_data"
-  destination = "/app/data"
+  source = "whatsapp_storage"
+  destination = "/data"
 
 # Secrets (set at deploy time):
 #   fly secrets set API_TOKENS=dev_xxx,another

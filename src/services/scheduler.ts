@@ -4,8 +4,7 @@ import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 import pino from 'pino'
-import type { ConnectionStatus } from './whatsapp.js'
-import { whatsappClient } from './whatsapp.js'
+import type { ConnectionStatus, WhatsAppClient } from './whatsapp.js'
 
 export const scheduledMessageSchema = z.object({
   id: z.string(),
@@ -21,15 +20,17 @@ export const scheduledMessageSchema = z.object({
 
 export type ScheduledMessage = z.infer<typeof scheduledMessageSchema>
 
-class SchedulerService {
+export class SchedulerService {
   private readonly dataFile: string
   private readonly logger = pino({ level: process.env.LOG_LEVEL || 'info' })
   private idToTask: Map<string, ScheduledTask> = new Map()
   private messages: ScheduledMessage[] = []
+  private whatsappClient: WhatsAppClient
 
-  constructor(dataDir = path.resolve(process.cwd(), 'data')) {
+  constructor(dataDir = path.resolve(process.cwd(), 'data'), whatsappClient: WhatsAppClient) {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
     this.dataFile = path.join(dataDir, 'scheduled.json')
+    this.whatsappClient = whatsappClient
     this.load()
     this.restoreJobs()
   }
@@ -66,13 +67,13 @@ class SchedulerService {
     try {
       if (!cron.validate(msg.schedule)) throw new Error('Invalid cron expression')
       const task = cron.schedule(msg.schedule, async () => {
-        const status: ConnectionStatus = whatsappClient.getConnectionStatus()
+        const status: ConnectionStatus = this.whatsappClient.getConnectionStatus()
         if (status !== 'connected') {
           this.logger.warn('Skipping scheduled send: WhatsApp disconnected')
           return
         }
         try {
-          const sock = whatsappClient.getSocket()
+          const sock = this.whatsappClient.getSocket()
           if (!sock) return
           const jid = this.formatJid(msg.number)
           await sock.sendMessage(jid, { text: msg.message })
@@ -182,6 +183,4 @@ class SchedulerService {
   }
 }
 
-export const scheduler = new SchedulerService()
-
-
+// Instantiated in server.ts with configured storage paths

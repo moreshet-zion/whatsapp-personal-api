@@ -4,11 +4,14 @@ import pino from 'pino'
 import path from 'path'
 import QRCode from 'qrcode'
 import { z } from 'zod'
-import { whatsappClient } from './services/whatsapp.js'
-import { scheduler } from './services/scheduler.js'
+import { WhatsAppClient } from './services/whatsapp.js'
+import { SchedulerService } from './services/scheduler.js'
 import { apiKeyAuth } from './middleware/auth.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
+const STORAGE_DIR = process.env.STORAGE_DIR || process.cwd()
+const sessionsDir = path.resolve(STORAGE_DIR, 'sessions')
+const dataDir = path.resolve(STORAGE_DIR, 'data')
 const app = express()
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 
@@ -16,6 +19,10 @@ app.use(express.json())
 app.use(apiKeyAuth)
 
 const PORT = Number(process.env.PORT || 3000)
+
+// Instantiate services after env loaded
+const whatsappClient = new WhatsAppClient(sessionsDir)
+const scheduler = new SchedulerService(dataDir, whatsappClient)
 
 // Start WhatsApp client
 whatsappClient.start().catch((err) => logger.error({ err }, 'Failed to start WhatsApp client'))
