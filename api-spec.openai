@@ -14,6 +14,10 @@ servers:
   - url: http://localhost:3000
     description: Local development server
 
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
 paths:
   /health:
     get:
@@ -22,6 +26,7 @@ paths:
       operationId: getHealth
       tags:
         - System
+      security: []
       responses:
         '200':
           description: System status
@@ -416,6 +421,14 @@ paths:
                     example: "Use https://crontab.guru to validate your cron expressions"
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+    BearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     ScheduledMessage:
       type: object
