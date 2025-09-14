@@ -67,6 +67,7 @@ typings/
 
 # dotenv environment variables file
 .env
+.env.*
 .env.test
 .env.production
 .env.local
@@ -107,9 +108,11 @@ dist
 whatsapp_session/
 .wwebjs_auth/
 .wwebjs_cache/
+sessions/
 
 # Application data
 data/
+dist/
 
 # OS generated files
 .DS_Store

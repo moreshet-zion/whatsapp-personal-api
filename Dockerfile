@@ -1,52 +1,45 @@
-# Optional Dockerfile (not needed with current Nixpacks setup)
-# Only use this if you specifically want Docker deployment
+# syntax = docker/dockerfile:1
 
-FROM node:18-slim
+# Adjust NODE_VERSION as desired
+ARG NODE_VERSION=20.10.0
+FROM node:${NODE_VERSION}-slim AS base
 
-# Install minimal dependencies for Puppeteer's bundled Chromium
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libdrm2 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    libxss1 \
-    && rm -rf /var/lib/apt/lists/*
+LABEL fly_launch_runtime="Node.js"
 
-# Let Puppeteer download and use its bundled Chromium for better compatibility
-# No PUPPETEER_EXECUTABLE_PATH or PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-
-# Create app directory
+# Node.js app lives here
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Set production environment
+ENV NODE_ENV="production"
 
-# Install dependencies
-RUN npm ci --only=production
 
-# Copy app source
+# Throw-away build stage to reduce size of final image
+FROM base AS build
+
+# Install packages needed to build node modules
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+
+# Install node modules
+COPY package-lock.json package.json ./
+RUN npm ci --include=dev
+
+# Copy application code
 COPY . .
 
-# Create data directory
-RUN mkdir -p data
+# Build application
+RUN npm run build
 
-# Expose port
+# Remove development dependencies
+RUN npm prune --omit=dev
+
+
+# Final stage for app image
+FROM base
+
+# Copy built application
+COPY --from=build /app /app
+
+# Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
-
-# Start the application
-CMD ["npm", "start"]
+CMD [ "npm", "run", "start" ]
