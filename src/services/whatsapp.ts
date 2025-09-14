@@ -12,7 +12,7 @@ type QRState = {
   ts?: number
 }
 
-class WhatsAppClient {
+export class WhatsAppClient {
   private socket: WASocket | null = null
   private status: ConnectionStatus = 'disconnected'
   private qrState: QRState = {}
@@ -91,7 +91,5 @@ class WhatsAppClient {
     await this.start()
   }
 }
-
-export const whatsappClient = new WhatsAppClient()
 
 
