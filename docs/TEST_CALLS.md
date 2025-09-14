@@ -37,7 +37,7 @@ xdg-open "$BASE_URL/qr-image" || true
 curl -s -X POST "$BASE_URL/send" \
   -H 'Content-Type: application/json' \
   -d '{
-    "number": "1234567890",
+    "number": "972545828285",
     "message": "Hello from my API!"
   }' | jq
 ```
