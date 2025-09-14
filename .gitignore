@@ -107,9 +107,11 @@ dist
 whatsapp_session/
 .wwebjs_auth/
 .wwebjs_cache/
+sessions/
 
 # Application data
 data/
+dist/
 
 # OS generated files
 .DS_Store
