@@ -1,0 +1,54 @@
+# Fly.io app configuration
+# Update the `app` name and `primary_region` before deploying
+
+app = "whatsapp-personal-api"
+primary_region = "fra"
+
+[build]
+  # Using default Node builder/Nixpacks; it will run `npm install` and `npm run build` if present
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = false
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "30s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"
+
+# Persist WhatsApp sessions and scheduled data across restarts
+# Create volumes before first deploy:
+#   fly volumes create whatsapp_sessions -r <region> -s 1
+#   fly volumes create whatsapp_data -r <region> -s 1
+
+[[mounts]]
+  source = "whatsapp_sessions"
+  destination = "/app/sessions"
+
+[[mounts]]
+  source = "whatsapp_data"
+  destination = "/app/data"
+
+# Secrets (set at deploy time):
+#   fly secrets set API_TOKENS=dev_xxx,another
