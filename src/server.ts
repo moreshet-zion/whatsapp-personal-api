@@ -1,15 +1,19 @@
 import express from 'express'
+import dotenv from 'dotenv'
 import pino from 'pino'
 import path from 'path'
 import QRCode from 'qrcode'
 import { z } from 'zod'
 import { whatsappClient } from './services/whatsapp.js'
 import { scheduler } from './services/scheduler.js'
+import { apiKeyAuth } from './middleware/auth.js'
 
+dotenv.config({ path: process.env.ENV_PATH || '.env' })
 const app = express()
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 
 app.use(express.json())
+app.use(apiKeyAuth)
 
 const PORT = Number(process.env.PORT || 3000)
 
