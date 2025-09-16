@@ -7,6 +7,15 @@ export BASE_URL=http://localhost:3000
 export API_KEY=changeme # set to one of your API_TOKENS
 ```
 
+## 🔥 Task Management Features
+
+This API provides comprehensive task management capabilities:
+- ✅ **Deactivate/Activate**: Toggle scheduled messages on/off without losing them
+- ✅ **Delete**: Permanently remove scheduled messages  
+- ✅ **Bulk Operations**: Manage multiple tasks at once
+- ✅ **Filtering**: Find specific tasks by status
+- ✅ **Backwards Compatible**: Works with existing scheduled cron jobs
+
 ## Health
 
 ```bash
@@ -51,7 +60,17 @@ Notes:
 ## Scheduled Messages — List
 
 ```bash
+# Get all scheduled messages
 curl -s "$BASE_URL/scheduled" -H "x-api-key: $API_KEY" | jq
+
+# Get only active scheduled messages
+curl -s "$BASE_URL/scheduled?active=true" -H "x-api-key: $API_KEY" | jq
+
+# Get only inactive/deactivated messages
+curl -s "$BASE_URL/scheduled?active=false" -H "x-api-key: $API_KEY" | jq
+
+# Get only one-time messages
+curl -s "$BASE_URL/scheduled?oneTime=true" -H "x-api-key: $API_KEY" | jq
 ```
 
 ## Scheduled Messages — Create
@@ -88,16 +107,51 @@ curl -s -X PUT "$BASE_URL/scheduled/$ID" \
   }' | jq
 ```
 
-## Scheduled Messages — Toggle Active
+## Scheduled Messages — Toggle Active/Inactive (Deactivate)
 
 ```bash
+# Toggle active status (activate if inactive, deactivate if active)
 curl -s -X POST "$BASE_URL/scheduled/$ID/toggle" -H "x-api-key: $API_KEY" | jq
 ```
 
-## Scheduled Messages — Delete
+**💡 Pro Tip**: Use toggle to temporarily disable messages without losing them. Perfect for vacation mode or testing!
+
+## Scheduled Messages — Delete (Permanent)
 
 ```bash
+# ⚠️ WARNING: This permanently deletes the scheduled message
 curl -s -X DELETE "$BASE_URL/scheduled/$ID" -H "x-api-key: $API_KEY" | jq
+```
+
+## Scheduled Messages — Bulk Operations ✨ NEW
+
+```bash
+# Bulk deactivate multiple messages (great for maintenance mode)
+curl -s -X POST "$BASE_URL/scheduled/bulk" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "ids": ["id1", "id2", "id3"],
+    "action": "deactivate"
+  }' | jq
+
+# Bulk activate multiple messages
+curl -s -X POST "$BASE_URL/scheduled/bulk" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "ids": ["id1", "id2", "id3"],
+    "action": "activate"
+  }' | jq
+
+# Bulk delete multiple messages (⚠️ PERMANENT)
+curl -s -X POST "$BASE_URL/scheduled/bulk" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "ids": ["id1", "id2", "id3"],
+    "action": "delete"
+  }' | jq
 ```
 
 ## Restart WhatsApp Session
@@ -111,6 +165,34 @@ curl -s -X POST "$BASE_URL/restart" -H "x-api-key: $API_KEY" | jq
 ```bash
 curl -s "$BASE_URL/schedule-examples" -H "x-api-key: $API_KEY" | jq
 ```
+
+---
+
+## 🎯 Task Management Best Practices
+
+### Deactivate vs Delete
+- **Deactivate** (`toggle` or `active: false`): Temporarily disable messages. Perfect for:
+  - Vacation mode
+  - Testing/debugging  
+  - Seasonal messages
+  - Maintenance periods
+- **Delete**: Permanently remove messages. Use when you're sure you won't need them again.
+
+### Bulk Operations
+- Use bulk operations to efficiently manage multiple tasks
+- Always test with a small batch first
+- Check the `results` object to see which operations succeeded/failed
+
+### Filtering
+- Use query parameters to find specific messages:
+  - `?active=false` - Find all deactivated messages
+  - `?active=true` - Find all active messages  
+  - `?oneTime=true` - Find all one-time messages
+
+### Backwards Compatibility
+- ✅ Existing scheduled cron jobs continue to work
+- ✅ Old messages without `active` field default to active
+- ✅ No migration needed
 
 ---
 

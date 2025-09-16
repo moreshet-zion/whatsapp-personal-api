@@ -39,7 +39,9 @@ export class SchedulerService {
     try {
       if (fs.existsSync(this.dataFile)) {
         const raw = fs.readFileSync(this.dataFile, 'utf8')
-        this.messages = JSON.parse(raw)
+        const rawMessages = JSON.parse(raw)
+        // Apply schema validation and defaults for backwards compatibility
+        this.messages = rawMessages.map((msg: any) => scheduledMessageSchema.parse(msg))
       }
     } catch (err) {
       this.logger.error({ err }, 'Failed to load scheduled messages')
