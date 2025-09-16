@@ -88,7 +88,22 @@ app.post('/send', async (req, res) => {
 
 // Scheduled messages
 app.get('/scheduled', (req, res) => {
-  res.json({ success: true, scheduledMessages: scheduler.list() })
+  const { active, oneTime } = req.query
+  let messages = scheduler.list()
+  
+  // Filter by active status if specified
+  if (active !== undefined) {
+    const isActive = active === 'true'
+    messages = messages.filter(m => m.active === isActive)
+  }
+  
+  // Filter by oneTime status if specified  
+  if (oneTime !== undefined) {
+    const isOneTime = oneTime === 'true'
+    messages = messages.filter(m => m.oneTime === isOneTime)
+  }
+  
+  res.json({ success: true, scheduledMessages: messages })
 })
 
 const createScheduledSchema = z.object({
@@ -153,6 +168,56 @@ app.post('/scheduled/:id/toggle', (req, res) => {
   const toggled = scheduler.toggle(req.params.id)
   if (!toggled) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
   res.json({ success: true, message: toggled.active ? 'Scheduled message activated' : 'Scheduled message deactivated', scheduledMessage: toggled })
+})
+
+// Bulk operations for scheduled messages
+const bulkOperationSchema = z.object({
+  ids: z.array(z.string()),
+  action: z.enum(['activate', 'deactivate', 'delete'])
+})
+
+app.post('/scheduled/bulk', (req, res) => {
+  const parse = bulkOperationSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  
+  const { ids, action } = parse.data
+  const results: { success: string[], failed: Array<{ id: string, error: string }> } = { success: [], failed: [] }
+  
+  for (const id of ids) {
+    try {
+      if (action === 'delete') {
+        const deleted = scheduler.delete(id)
+        if (deleted) {
+          results.success.push(id)
+        } else {
+          results.failed.push({ id, error: 'Not found' })
+        }
+      } else if (action === 'activate' || action === 'deactivate') {
+        const toggled = scheduler.toggle(id, action === 'activate')
+        if (toggled) {
+          results.success.push(id)
+        } else {
+          results.failed.push({ id, error: 'Not found' })
+        }
+      }
+    } catch (err) {
+      results.failed.push({ id, error: (err as Error).message })
+    }
+  }
+  
+  res.json({ 
+    success: true, 
+    message: `Bulk ${action} completed`, 
+    results: {
+      processed: ids.length,
+      successful: results.success.length,
+      failed: results.failed.length,
+      successfulIds: results.success,
+      failures: results.failed
+    }
+  })
 })
 
 // Restart session

@@ -146,10 +146,25 @@ paths:
   /scheduled:
     get:
       summary: Get all scheduled messages
-      description: Returns a list of all scheduled messages
+      description: Returns a list of all scheduled messages with optional filtering
       operationId: getScheduledMessages
       tags:
         - Scheduled Messages
+      parameters:
+        - name: active
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [true, false]
+          description: Filter by active status
+        - name: oneTime
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [true, false]
+          description: Filter by one-time status
       responses:
         '200':
           description: List of scheduled messages
@@ -354,6 +369,87 @@ paths:
                     $ref: '#/components/schemas/ScheduledMessage'
         '404':
           description: Scheduled message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /scheduled/bulk:
+    post:
+      summary: Bulk operations on scheduled messages
+      description: Perform bulk activate, deactivate, or delete operations on multiple scheduled messages
+      operationId: bulkScheduledMessages
+      tags:
+        - Scheduled Messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ids
+                - action
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of scheduled message IDs to operate on
+                  example: ["123e4567-e89b-12d3-a456-426614174000", "987fcdeb-51a2-43d7-8f9e-123456789abc"]
+                action:
+                  type: string
+                  enum: [activate, deactivate, delete]
+                  description: Action to perform on all specified messages
+                  example: "deactivate"
+      responses:
+        '200':
+          description: Bulk operation completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Bulk deactivate completed"
+                  results:
+                    type: object
+                    properties:
+                      processed:
+                        type: integer
+                        description: Total number of IDs processed
+                        example: 2
+                      successful:
+                        type: integer
+                        description: Number of successful operations
+                        example: 1
+                      failed:
+                        type: integer
+                        description: Number of failed operations
+                        example: 1
+                      successfulIds:
+                        type: array
+                        items:
+                          type: string
+                        description: IDs that were successfully processed
+                        example: ["123e4567-e89b-12d3-a456-426614174000"]
+                      failures:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            error:
+                              type: string
+                        description: Details of failed operations
+                        example: [{"id": "987fcdeb-51a2-43d7-8f9e-123456789abc", "error": "Not found"}]
+        '400':
+          description: Invalid request parameters
           content:
             application/json:
               schema:
