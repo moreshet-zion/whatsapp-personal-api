@@ -6,6 +6,7 @@ import QRCode from 'qrcode'
 import { z } from 'zod'
 import { WhatsAppClient } from './services/whatsapp.js'
 import { SchedulerService } from './services/scheduler.js'
+import { PubSubService } from './services/pubsub.js'
 import { apiKeyAuth } from './middleware/auth.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
@@ -23,17 +24,25 @@ const PORT = Number(process.env.PORT || 3000)
 // Instantiate services after env loaded
 const whatsappClient = new WhatsAppClient(sessionsDir)
 const scheduler = new SchedulerService(dataDir, whatsappClient)
+const pubsub = new PubSubService(dataDir, whatsappClient)
 
 // Start WhatsApp client
 whatsappClient.start().catch((err) => logger.error({ err }, 'Failed to start WhatsApp client'))
 
 // Health endpoint
 app.get('/health', (req, res) => {
+  const queueStatus = pubsub.getQueueStatus()
   res.json({
     status: whatsappClient.getConnectionStatus(),
     timestamp: new Date().toISOString(),
     scheduledMessages: scheduler.list().length,
-    activeJobs: scheduler.activeJobs()
+    activeJobs: scheduler.activeJobs(),
+    pubsub: {
+      pendingMessages: queueStatus.pendingMessages,
+      isProcessing: queueStatus.isProcessing,
+      topics: pubsub.getTopics(true).length,
+      subscribers: pubsub.getSubscribers().length
+    }
   })
 })
 
@@ -243,6 +252,344 @@ app.get('/schedule-examples', (req, res) => {
     note: 'Use https://crontab.guru to validate your cron expressions'
   })
 })
+
+// ========================================
+// PUB/SUB API ENDPOINTS
+// ========================================
+
+// Topic Management APIs
+const createTopicSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional()
+})
+
+app.post('/topics', (req, res) => {
+  const parse = createTopicSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  try {
+    const topic = pubsub.createTopic(parse.data.name, parse.data.description)
+    res.json({ success: true, message: 'Topic created successfully', topic })
+  } catch (err) {
+    logger.error({ err }, 'Failed to create topic')
+    res.status(500).json({ success: false, error: 'Failed to create topic' })
+  }
+})
+
+app.get('/topics', (req, res) => {
+  const activeOnly = req.query.active === 'true'
+  try {
+    const topics = pubsub.getTopics(activeOnly)
+    res.json({ success: true, topics })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get topics')
+    res.status(500).json({ success: false, error: 'Failed to get topics' })
+  }
+})
+
+app.get('/topics/:id', (req, res) => {
+  try {
+    const topic = pubsub.getTopic(req.params.id)
+    if (!topic) {
+      return res.status(404).json({ success: false, error: 'Topic not found' })
+    }
+    res.json({ success: true, topic })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get topic')
+    res.status(500).json({ success: false, error: 'Failed to get topic' })
+  }
+})
+
+const updateTopicSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  active: z.boolean().optional()
+})
+
+app.put('/topics/:id', (req, res) => {
+  const parse = updateTopicSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  try {
+    const updates: { name?: string; description?: string; active?: boolean } = {}
+    if (parse.data.name !== undefined) updates.name = parse.data.name
+    if (parse.data.description !== undefined) updates.description = parse.data.description
+    if (parse.data.active !== undefined) updates.active = parse.data.active
+    const topic = pubsub.updateTopic(req.params.id, updates)
+    if (!topic) {
+      return res.status(404).json({ success: false, error: 'Topic not found' })
+    }
+    res.json({ success: true, message: 'Topic updated successfully', topic })
+  } catch (err) {
+    logger.error({ err }, 'Failed to update topic')
+    res.status(500).json({ success: false, error: 'Failed to update topic' })
+  }
+})
+
+app.delete('/topics/:id', (req, res) => {
+  try {
+    const deleted = pubsub.deleteTopic(req.params.id)
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Topic not found' })
+    }
+    res.json({ success: true, message: 'Topic deleted successfully' })
+  } catch (err) {
+    logger.error({ err }, 'Failed to delete topic')
+    res.status(500).json({ success: false, error: 'Failed to delete topic' })
+  }
+})
+
+// Topic Subscribers API
+app.get('/topics/:id/subscribers', (req, res) => {
+  try {
+    const topic = pubsub.getTopic(req.params.id)
+    if (!topic) {
+      return res.status(404).json({ success: false, error: 'Topic not found' })
+    }
+    
+    const subscribers = pubsub.getTopicSubscribers(req.params.id)
+    res.json({ success: true, topic: topic.name, subscribers })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get topic subscribers')
+    res.status(500).json({ success: false, error: 'Failed to get topic subscribers' })
+  }
+})
+
+// Subscription Management APIs
+const subscribeSchema = z.object({
+  phoneNumber: z.string().min(1),
+  topicId: z.string().min(1)
+})
+
+app.post('/subscribe', (req, res) => {
+  const parse = subscribeSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  try {
+    const success = pubsub.subscribe(parse.data.topicId, parse.data.phoneNumber)
+    if (!success) {
+      return res.status(400).json({ success: false, error: 'Failed to subscribe - topic not found or already subscribed' })
+    }
+    res.json({ success: true, message: 'Successfully subscribed to topic' })
+  } catch (err) {
+    logger.error({ err }, 'Failed to subscribe')
+    res.status(500).json({ success: false, error: 'Failed to subscribe' })
+  }
+})
+
+app.post('/unsubscribe', (req, res) => {
+  const parse = subscribeSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  try {
+    const success = pubsub.unsubscribe(parse.data.topicId, parse.data.phoneNumber)
+    if (!success) {
+      return res.status(400).json({ success: false, error: 'Failed to unsubscribe - not subscribed to this topic' })
+    }
+    res.json({ success: true, message: 'Successfully unsubscribed from topic' })
+  } catch (err) {
+    logger.error({ err }, 'Failed to unsubscribe')
+    res.status(500).json({ success: false, error: 'Failed to unsubscribe' })
+  }
+})
+
+// Subscriber Management APIs
+app.get('/subscribers', (req, res) => {
+  try {
+    const subscribers = pubsub.getSubscribers()
+    res.json({ success: true, subscribers })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get subscribers')
+    res.status(500).json({ success: false, error: 'Failed to get subscribers' })
+  }
+})
+
+app.get('/subscribers/:phoneNumber', (req, res) => {
+  try {
+    const subscriber = pubsub.getSubscriber(req.params.phoneNumber)
+    if (!subscriber) {
+      return res.status(404).json({ success: false, error: 'Subscriber not found' })
+    }
+    res.json({ success: true, subscriber })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get subscriber')
+    res.status(500).json({ success: false, error: 'Failed to get subscriber' })
+  }
+})
+
+app.get('/subscribers/:phoneNumber/topics', (req, res) => {
+  try {
+    const topics = pubsub.getSubscriberTopics(req.params.phoneNumber)
+    res.json({ success: true, phoneNumber: req.params.phoneNumber, topics })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get subscriber topics')
+    res.status(500).json({ success: false, error: 'Failed to get subscriber topics' })
+  }
+})
+
+const updateSubscriberSchema = z.object({
+  name: z.string().optional(),
+  active: z.boolean().optional()
+})
+
+app.put('/subscribers/:phoneNumber', (req, res) => {
+  const parse = updateSubscriberSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  try {
+    const updates: { name?: string; active?: boolean } = {}
+    if (parse.data.name !== undefined) updates.name = parse.data.name
+    if (parse.data.active !== undefined) updates.active = parse.data.active
+    const subscriber = pubsub.updateSubscriber(req.params.phoneNumber, updates)
+    if (!subscriber) {
+      return res.status(404).json({ success: false, error: 'Subscriber not found' })
+    }
+    res.json({ success: true, message: 'Subscriber updated successfully', subscriber })
+  } catch (err) {
+    logger.error({ err }, 'Failed to update subscriber')
+    res.status(500).json({ success: false, error: 'Failed to update subscriber' })
+  }
+})
+
+app.delete('/subscribers/:phoneNumber', (req, res) => {
+  try {
+    const deleted = pubsub.deleteSubscriber(req.params.phoneNumber)
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Subscriber not found' })
+    }
+    res.json({ success: true, message: 'Subscriber deleted successfully' })
+  } catch (err) {
+    logger.error({ err }, 'Failed to delete subscriber')
+    res.status(500).json({ success: false, error: 'Failed to delete subscriber' })
+  }
+})
+
+// Subscription Status API
+app.get('/subscription-status/:phoneNumber/:topicId', (req, res) => {
+  try {
+    const isSubscribed = pubsub.isSubscribed(req.params.topicId, req.params.phoneNumber)
+    res.json({ 
+      success: true, 
+      phoneNumber: req.params.phoneNumber,
+      topicId: req.params.topicId,
+      subscribed: isSubscribed 
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to check subscription status')
+    res.status(500).json({ success: false, error: 'Failed to check subscription status' })
+  }
+})
+
+// Messaging API
+const publishMessageSchema = z.object({
+  topicId: z.string().min(1),
+  message: z.string().min(1),
+  delaySeconds: z.number().min(0).optional().default(0)
+})
+
+app.post('/publish', (req, res) => {
+  const parse = publishMessageSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  if (whatsappClient.getConnectionStatus() !== 'connected') {
+    return res.status(503).json({ success: false, error: 'WhatsApp not connected' })
+  }
+  
+  try {
+    const queueItem = pubsub.publishMessage(parse.data.topicId, parse.data.message, parse.data.delaySeconds)
+    if (!queueItem) {
+      return res.status(400).json({ success: false, error: 'Failed to publish message - topic not found or no subscribers' })
+    }
+    res.json({ success: true, message: 'Message queued for delivery', queueItem })
+  } catch (err) {
+    logger.error({ err }, 'Failed to publish message')
+    res.status(500).json({ success: false, error: 'Failed to publish message' })
+  }
+})
+
+// Settings Management API
+app.get('/settings', (req, res) => {
+  try {
+    const settings = pubsub.getSettings()
+    res.json({ success: true, settings })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get settings')
+    res.status(500).json({ success: false, error: 'Failed to get settings' })
+  }
+})
+
+const updateSettingSchema = z.object({
+  key: z.string().min(1),
+  value: z.string(),
+  description: z.string().optional()
+})
+
+app.put('/settings', (req, res) => {
+  const parse = updateSettingSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters', details: parse.error.issues })
+  }
+  
+  try {
+    const setting = pubsub.updateSetting(parse.data.key, parse.data.value, parse.data.description)
+    res.json({ success: true, message: 'Setting updated successfully', setting })
+  } catch (err) {
+    logger.error({ err }, 'Failed to update setting')
+    res.status(500).json({ success: false, error: 'Failed to update setting' })
+  }
+})
+
+app.get('/settings/:key', (req, res) => {
+  try {
+    const value = pubsub.getSetting(req.params.key)
+    if (value === null) {
+      return res.status(404).json({ success: false, error: 'Setting not found' })
+    }
+    res.json({ success: true, key: req.params.key, value })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get setting')
+    res.status(500).json({ success: false, error: 'Failed to get setting' })
+  }
+})
+
+// Queue Status API
+app.get('/queue-status', (req, res) => {
+  try {
+    const status = pubsub.getQueueStatus()
+    res.json({ success: true, queue: status })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get queue status')
+    res.status(500).json({ success: false, error: 'Failed to get queue status' })
+  }
+})
+
+// Cleanup API
+app.post('/cleanup-messages', (req, res) => {
+  const days = parseInt(req.query.days as string) || 7
+  try {
+    const cleaned = pubsub.cleanupOldMessages(days)
+    res.json({ success: true, message: `Cleaned up ${cleaned} old messages` })
+  } catch (err) {
+    logger.error({ err }, 'Failed to cleanup messages')
+    res.status(500).json({ success: false, error: 'Failed to cleanup messages' })
+  }
+})
+
+// ========================================
+// END PUB/SUB API ENDPOINTS
+// ========================================
 
 app.listen(PORT, () => {
   logger.info(`Server listening on http://localhost:${PORT}`)
