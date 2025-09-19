@@ -6,6 +6,7 @@ import QRCode from 'qrcode'
 import { z } from 'zod'
 import { WhatsAppClient } from './services/whatsapp.js'
 import { SchedulerService } from './services/scheduler.js'
+import { PubSubService } from './services/pubsub.js'
 import { apiKeyAuth } from './middleware/auth.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
@@ -23,6 +24,7 @@ const PORT = Number(process.env.PORT || 3000)
 // Instantiate services after env loaded
 const whatsappClient = new WhatsAppClient(sessionsDir)
 const scheduler = new SchedulerService(dataDir, whatsappClient)
+const pubSub = new PubSubService(dataDir, whatsappClient)
 
 // Start WhatsApp client
 whatsappClient.start().catch((err) => logger.error({ err }, 'Failed to start WhatsApp client'))
@@ -168,6 +170,133 @@ app.post('/scheduled/:id/toggle', (req, res) => {
   const toggled = scheduler.toggle(req.params.id)
   if (!toggled) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
   res.json({ success: true, message: toggled.active ? 'Scheduled message activated' : 'Scheduled message deactivated', scheduledMessage: toggled })
+})
+
+// Pub/Sub Topics
+const createTopicSchema = z.object({
+  name: z.string().min(1, 'Topic name is required'),
+  description: z.string().optional()
+})
+
+app.get('/pubsub/topics', (_req, res) => {
+  res.json({ success: true, topics: pubSub.listTopics() })
+})
+
+app.post('/pubsub/topics', (req, res) => {
+  const parse = createTopicSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  try {
+    const topic = pubSub.createTopic(parse.data)
+    res.status(201).json({ success: true, message: 'Topic created', topic })
+  } catch (err) {
+    res.status(400).json({ success: false, error: (err as Error).message })
+  }
+})
+
+app.delete('/pubsub/topics/:id', (req, res) => {
+  const deleted = pubSub.deleteTopic(req.params.id)
+  if (!deleted) {
+    return res.status(404).json({ success: false, error: 'Topic not found' })
+  }
+  res.json({ success: true, message: 'Topic deleted' })
+})
+
+app.get('/pubsub/topics/:id', (req, res) => {
+  const topic = pubSub.getTopic(req.params.id)
+  if (!topic) {
+    return res.status(404).json({ success: false, error: 'Topic not found' })
+  }
+  res.json({ success: true, topic })
+})
+
+app.get('/pubsub/topics/:id/subscribers', (req, res) => {
+  const subscribers = pubSub.listSubscribers(req.params.id)
+  if (!subscribers) {
+    return res.status(404).json({ success: false, error: 'Topic not found' })
+  }
+  res.json({ success: true, subscribers })
+})
+
+const subscriberSchema = z.object({
+  number: z.string().min(1, 'Phone number is required')
+})
+
+app.post('/pubsub/topics/:id/subscribers', (req, res) => {
+  const parse = subscriberSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  try {
+    const result = pubSub.subscribe(req.params.id, parse.data.number)
+    res.json({ success: true, message: result.created ? 'Subscribed to topic' : 'Already subscribed', topic: result.topic })
+  } catch (err) {
+    res.status(404).json({ success: false, error: (err as Error).message })
+  }
+})
+
+app.delete('/pubsub/topics/:id/subscribers', (req, res) => {
+  const parse = subscriberSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  try {
+    const result = pubSub.unsubscribe(req.params.id, parse.data.number)
+    res.json({ success: true, message: result.removed ? 'Unsubscribed from topic' : 'Not subscribed', topic: result.topic })
+  } catch (err) {
+    res.status(404).json({ success: false, error: (err as Error).message })
+  }
+})
+
+app.get('/pubsub/subscriptions/:number', (req, res) => {
+  try {
+    const status = pubSub.getSubscriptionStatus(req.params.number)
+    res.json({ success: true, subscription: status })
+  } catch (err) {
+    res.status(400).json({ success: false, error: (err as Error).message })
+  }
+})
+
+const publishSchema = z.object({
+  topicId: z.string(),
+  message: z.string()
+})
+
+app.post('/pubsub/publish', async (req, res) => {
+  const parse = publishSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  try {
+    const summary = await pubSub.publish(parse.data.topicId, parse.data.message)
+    res.json({ success: true, message: 'Message broadcast completed', summary })
+  } catch (err) {
+    const message = (err as Error).message
+    const status = message === 'WhatsApp not connected' || message === 'WhatsApp socket unavailable' ? 503 : message === 'Topic not found' ? 404 : 400
+    res.status(status).json({ success: false, error: message })
+  }
+})
+
+const settingsSchema = z.object({
+  messageDelaySeconds: z.number().min(0).optional()
+})
+
+app.get('/pubsub/settings', (_req, res) => {
+  res.json({ success: true, settings: pubSub.getSettings() })
+})
+
+app.put('/pubsub/settings', (req, res) => {
+  const parse = settingsSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  try {
+    const settings = pubSub.updateSettings(parse.data)
+    res.json({ success: true, message: 'Settings updated', settings })
+  } catch (err) {
+    res.status(400).json({ success: false, error: (err as Error).message })
+  }
 })
 
 // Bulk operations for scheduled messages

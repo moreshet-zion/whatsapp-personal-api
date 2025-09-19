@@ -11,6 +11,7 @@ A personal WhatsApp API server with scheduled messaging, built on Express + Bail
 - 📊 Connection health endpoint
 - 🔐 QR code authentication (+ HTML QR page)
 - 💾 Persistent storage for sessions and schedules
+- 📣 Topic-based pub/sub broadcasts with throttled delivery
 - 🛡️ API key authentication
 
 ## 🚀 Quick Start
@@ -74,6 +75,19 @@ Scheduled Messages
 - DELETE `/scheduled/:id` — Delete
 - POST `/scheduled/:id/toggle` — Activate/Deactivate
 
+Pub/Sub
+- GET `/pubsub/topics` — List topics
+- POST `/pubsub/topics` — Create a topic
+- DELETE `/pubsub/topics/:id` — Delete a topic
+- GET `/pubsub/topics/:id` — Topic details (with subscribers)
+- GET `/pubsub/topics/:id/subscribers` — List subscribers for a topic
+- POST `/pubsub/topics/:id/subscribers` — Subscribe a phone number
+- DELETE `/pubsub/topics/:id/subscribers` — Unsubscribe a phone number
+- GET `/pubsub/subscriptions/:number` — List topics for a phone number
+- POST `/pubsub/publish` — Broadcast a message to a topic
+- GET `/pubsub/settings` — View pub/sub settings
+- PUT `/pubsub/settings` — Update pub/sub settings (e.g., delivery delay)
+
 Utilities
 - GET `/schedule-examples`
 
@@ -101,6 +115,27 @@ curl -X POST http://localhost:3000/scheduled \
     "schedule": "0 10 * * 1",
     "description": "Monday 10am"
   }'
+```
+
+Create a topic and broadcast
+```bash
+# Create a topic
+curl -X POST http://localhost:3000/pubsub/topics \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{ "name": "Daily Updates" }'
+
+# Subscribe numbers
+curl -X POST http://localhost:3000/pubsub/topics/<TOPIC_ID>/subscribers \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{ "number": "+1234567890" }'
+
+# Broadcast with the configured delay between each recipient
+curl -X POST http://localhost:3000/pubsub/publish \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{ "topicId": "<TOPIC_ID>", "message": "Good morning!" }'
 ```
 
 One‑time Sunday 04:27
@@ -137,6 +172,7 @@ More examples in `docs/TEST_CALLS.md`.
 
 - WhatsApp credentials: `sessions/`
 - Scheduled messages: `data/scheduled.json`
+- Pub/Sub topics + subscribers: `data/pubsub.json`
 
 ## 🌐 Deployment
 
@@ -166,6 +202,7 @@ docker run -p 3000:8080 \
 - Keep your API key secret. Rotate if leaked.
 - Persist `sessions/` to avoid scanning again after restarts.
 - Monitor `/health` and logs for connection state.
+- Baileys does not expose throttling controls, so the pub/sub sender enforces your configured delay between each recipient to avoid spamming WhatsApp.
 
 ## 📚 References
 
