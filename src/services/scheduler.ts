@@ -107,6 +107,12 @@ export class SchedulerService {
   private scheduleDateJob(msg: ScheduledMessage) {
     if (!msg.scheduleDate || msg.executed) return
     
+    // Don't schedule inactive messages
+    if (!msg.active) {
+      this.logger.debug({ id: msg.id }, 'Skipping inactive date-based message')
+      return
+    }
+    
     const scheduledTime = new Date(msg.scheduleDate).getTime()
     const now = Date.now()
     const delay = scheduledTime - now
@@ -114,7 +120,10 @@ export class SchedulerService {
     if (delay <= 0) {
       // If the scheduled time has already passed, check if we should still send it
       if (delay > -60000) { // Within 1 minute past, still send
-        this.sendScheduledMessage(msg)
+        // Use await to prevent race conditions
+        this.sendScheduledMessage(msg).catch(err => {
+          this.logger.error({ err, id: msg.id }, 'Failed to send past-due message')
+        })
       } else {
         this.logger.warn({ id: msg.id, scheduleDate: msg.scheduleDate }, 'Scheduled date has passed, marking as executed')
         this.markAsExecuted(msg.id)

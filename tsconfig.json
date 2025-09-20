@@ -45,5 +45,6 @@
 
     "esModuleInterop": true,
     "resolveJsonModule": true,
-  }
+  },
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/__tests__/**"]
 }
