@@ -90,7 +90,7 @@ app.post('/send', async (req, res) => {
 
 // Scheduled messages
 app.get('/scheduled', (req, res) => {
-  const { active, oneTime } = req.query
+  const { active, oneTime, executed } = req.query
   let messages = scheduler.list()
   
   // Filter by active status if specified
@@ -103,6 +103,12 @@ app.get('/scheduled', (req, res) => {
   if (oneTime !== undefined) {
     const isOneTime = oneTime === 'true'
     messages = messages.filter(m => m.oneTime === isOneTime)
+  }
+  
+  // Filter by executed status if specified
+  if (executed !== undefined) {
+    const isExecuted = executed === 'true'
+    messages = messages.filter(m => m.executed === isExecuted)
   }
   
   res.json({ success: true, scheduledMessages: messages })
@@ -139,6 +145,7 @@ const updateScheduledSchema = z.object({
   number: z.string().optional(),
   message: z.string().optional(),
   schedule: z.string().optional(),
+  scheduleDate: z.string().optional(),
   description: z.string().optional(),
   oneTime: z.boolean().optional(),
   active: z.boolean().optional()
@@ -148,16 +155,21 @@ app.put('/scheduled/:id', (req, res) => {
   if (!parse.success) {
     return res.status(400).json({ success: false, error: 'Invalid request parameters' })
   }
-  const updates: any = {}
-  if (parse.data.number !== undefined) updates.number = parse.data.number
-  if (parse.data.message !== undefined) updates.message = parse.data.message
-  if (parse.data.schedule !== undefined) updates.schedule = parse.data.schedule
-  if (parse.data.description !== undefined) updates.description = parse.data.description
-  if (parse.data.oneTime !== undefined) updates.oneTime = parse.data.oneTime
-  if (parse.data.active !== undefined) updates.active = parse.data.active
-  const updated = scheduler.update(req.params.id, updates)
-  if (!updated) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
-  res.json({ success: true, message: 'Scheduled message updated', scheduledMessage: updated })
+  try {
+    const updates: any = {}
+    if (parse.data.number !== undefined) updates.number = parse.data.number
+    if (parse.data.message !== undefined) updates.message = parse.data.message
+    if (parse.data.schedule !== undefined) updates.schedule = parse.data.schedule
+    if (parse.data.scheduleDate !== undefined) updates.scheduleDate = parse.data.scheduleDate
+    if (parse.data.description !== undefined) updates.description = parse.data.description
+    if (parse.data.oneTime !== undefined) updates.oneTime = parse.data.oneTime
+    if (parse.data.active !== undefined) updates.active = parse.data.active
+    const updated = scheduler.update(req.params.id, updates)
+    if (!updated) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
+    res.json({ success: true, message: 'Scheduled message updated', scheduledMessage: updated })
+  } catch (err) {
+    return res.status(400).json({ success: false, error: (err as Error).message })
+  }
 })
 
 app.delete('/scheduled/:id', (req, res) => {
@@ -170,6 +182,32 @@ app.post('/scheduled/:id/toggle', (req, res) => {
   const toggled = scheduler.toggle(req.params.id)
   if (!toggled) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
   res.json({ success: true, message: toggled.active ? 'Scheduled message activated' : 'Scheduled message deactivated', scheduledMessage: toggled })
+})
+
+// Schedule a one-time message at a specific date/time
+const scheduleDateSchema = z.object({
+  number: z.string(),
+  message: z.string(),
+  scheduleDate: z.string(), // ISO 8601 date string
+  description: z.string().optional()
+})
+
+app.post('/scheduleDate', (req, res) => {
+  const parse = scheduleDateSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+  }
+  try {
+    const msg = scheduler.createDateSchedule({
+      number: parse.data.number,
+      message: parse.data.message,
+      scheduleDate: parse.data.scheduleDate,
+      description: parse.data.description || ''
+    })
+    res.json({ success: true, message: 'Date-based scheduled message created', scheduledMessage: msg })
+  } catch (err) {
+    return res.status(400).json({ success: false, error: (err as Error).message })
+  }
 })
 
 // Pub/Sub Topics

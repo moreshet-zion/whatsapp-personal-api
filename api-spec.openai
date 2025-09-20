@@ -165,6 +165,13 @@ paths:
             type: string
             enum: [true, false]
           description: Filter by one-time status
+        - name: executed
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [true, false]
+          description: Filter by executed status (for date-based schedules)
       responses:
         '200':
           description: List of scheduled messages
@@ -271,6 +278,10 @@ paths:
                 schedule:
                   type: string
                   description: Cron schedule expression
+                scheduleDate:
+                  type: string
+                  format: date-time
+                  description: ISO 8601 date-time for one-time scheduled messages
                 description:
                   type: string
                   description: Message description
@@ -369,6 +380,64 @@ paths:
                     $ref: '#/components/schemas/ScheduledMessage'
         '404':
           description: Scheduled message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /scheduleDate:
+    post:
+      summary: Schedule a one-time message at a specific date/time
+      description: Creates a new scheduled message that will be sent once at a specific date and time
+      operationId: createDateScheduledMessage
+      tags:
+        - Scheduled Messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+                - message
+                - scheduleDate
+              properties:
+                number:
+                  type: string
+                  description: Phone number without country code prefix
+                  example: "1234567890"
+                message:
+                  type: string
+                  description: Message content to send
+                  example: "Happy Birthday! 🎂"
+                scheduleDate:
+                  type: string
+                  format: date-time
+                  description: ISO 8601 date-time when the message should be sent
+                  example: "2025-12-26T20:34:00Z"
+                description:
+                  type: string
+                  description: Optional description of the scheduled message
+                  example: "Birthday reminder for John"
+      responses:
+        '200':
+          description: Date-based scheduled message created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Date-based scheduled message created"
+                  scheduledMessage:
+                    $ref: '#/components/schemas/ScheduledMessage'
+        '400':
+          description: Invalid request, date format, or date in the past
           content:
             application/json:
               schema:
@@ -543,8 +612,13 @@ components:
           example: "Happy Monday!"
         schedule:
           type: string
-          description: Cron schedule expression
+          description: Cron schedule expression (empty for date-based schedules)
           example: "0 9 * * 1"
+        scheduleDate:
+          type: string
+          format: date-time
+          description: ISO 8601 date-time for one-time scheduled messages
+          example: "2025-12-26T20:34:00Z"
         description:
           type: string
           description: Message description
@@ -557,6 +631,10 @@ components:
           type: boolean
           description: Whether the message is active
           example: true
+        executed:
+          type: boolean
+          description: Whether the date-based message has been sent
+          example: false
         created:
           type: string
           format: date-time
