@@ -71,9 +71,15 @@ curl -s "$BASE_URL/scheduled?active=false" -H "x-api-key: $API_KEY" | jq
 
 # Get only one-time messages
 curl -s "$BASE_URL/scheduled?oneTime=true" -H "x-api-key: $API_KEY" | jq
+
+# Get only executed date-based messages
+curl -s "$BASE_URL/scheduled?executed=true" -H "x-api-key: $API_KEY" | jq
+
+# Get pending date-based messages
+curl -s "$BASE_URL/scheduled?executed=false&oneTime=true" -H "x-api-key: $API_KEY" | jq
 ```
 
-## Scheduled Messages — Create
+## Scheduled Messages — Create (Cron-based)
 
 ```bash
 curl -s -X POST "$BASE_URL/scheduled" \
@@ -88,6 +94,46 @@ curl -s -X POST "$BASE_URL/scheduled" \
   }' | jq
 ```
 
+## Scheduled Messages — Create (Date-based) ✨ NEW
+
+Schedule a one-time message for a specific date and time:
+
+```bash
+# Schedule a message for December 26, 2025 at 8:34 PM
+curl -s -X POST "$BASE_URL/scheduleDate" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "number": "972545828285",
+    "message": "Happy Holidays! 🎄",
+    "scheduleDate": "2025-12-26T20:34:00Z",
+    "description": "Holiday greeting"
+  }' | jq
+
+# Schedule a birthday reminder
+curl -s -X POST "$BASE_URL/scheduleDate" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "number": "972545828285",
+    "message": "Happy Birthday! 🎂 Hope you have an amazing day!",
+    "scheduleDate": "2025-10-15T09:00:00Z",
+    "description": "Birthday reminder for John"
+  }' | jq
+
+# Schedule a meeting reminder (30 minutes from now)
+FUTURE_TIME=$(date -u -d "+30 minutes" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v+30M +"%Y-%m-%dT%H:%M:%SZ")
+curl -s -X POST "$BASE_URL/scheduleDate" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d "{
+    \"number\": \"972545828285\",
+    \"message\": \"Meeting reminder: Team standup in 5 minutes\",
+    \"scheduleDate\": \"$FUTURE_TIME\",
+    \"description\": \"Meeting reminder\"
+  }" | jq
+```
+
 Copy the returned `scheduledMessage.id` value for the following calls:
 
 ```bash
@@ -97,6 +143,7 @@ export ID="<paste-id-here>"
 ## Scheduled Messages — Update
 
 ```bash
+# Update a cron-based schedule
 curl -s -X PUT "$BASE_URL/scheduled/$ID" \
   -H 'Content-Type: application/json' \
   -H "x-api-key: $API_KEY" \
@@ -104,6 +151,16 @@ curl -s -X PUT "$BASE_URL/scheduled/$ID" \
     "message": "Updated Monday greeting",
     "schedule": "0 10 * * 1",  
     "active": true
+  }' | jq
+
+# Update a date-based schedule (change the date/time)
+curl -s -X PUT "$BASE_URL/scheduled/$ID" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "message": "Updated holiday message",
+    "scheduleDate": "2025-12-25T18:00:00Z",
+    "description": "Christmas greeting"
   }' | jq
 ```
 
@@ -167,6 +224,35 @@ curl -s "$BASE_URL/schedule-examples" -H "x-api-key: $API_KEY" | jq
 ```
 
 ---
+
+## 📅 Date-Based vs Cron-Based Schedules
+
+### Date-Based Schedules (`/scheduleDate`)
+- **One-time messages**: Sent once at a specific date and time
+- **Use cases**: 
+  - Birthday reminders
+  - Holiday greetings  
+  - Meeting reminders
+  - Event notifications
+  - Appointment confirmations
+- **Format**: ISO 8601 date-time (e.g., `2025-12-26T20:34:00Z`)
+- **Behavior**: 
+  - Message is sent once and marked as `executed`
+  - Can be cancelled/deactivated before execution
+  - Cannot be in the past (except 1 minute grace period)
+
+### Cron-Based Schedules (`/scheduled`)
+- **Recurring messages**: Sent on a repeating schedule
+- **Use cases**:
+  - Daily reminders
+  - Weekly check-ins
+  - Monthly reports
+  - Regular notifications
+- **Format**: Cron expression (e.g., `0 9 * * 1` for every Monday at 9 AM)
+- **Behavior**:
+  - Repeats according to cron pattern
+  - Can be set as `oneTime` to auto-deactivate after first send
+  - Use https://crontab.guru to validate expressions
 
 ## 🎯 Task Management Best Practices
 
