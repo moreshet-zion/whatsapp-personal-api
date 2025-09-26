@@ -66,12 +66,33 @@ app.get('/qr-image', async (req, res) => {
   return res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WhatsApp QR</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;color:#eee} .card{background:#1c1c1c;padding:24px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.3);text-align:center} img{width:320px;height:320px} p{opacity:.8}</style></head><body><div class="card"><h1>Scan to Link WhatsApp</h1><img alt="WhatsApp QR" src="${dataUrl}"><p>Open WhatsApp → Linked devices → Link a device</p><p><small>This page auto-refreshes on reload if the code expires.</small></p></div></body></html>`)
 })
 
-// Send message
-const sendBodySchema = z.object({ number: z.string(), message: z.string() })
+// Get group chats
+app.get('/groups', async (req, res) => {
+  if (whatsappClient.getConnectionStatus() !== 'connected') {
+    return res.status(503).json({ success: false, error: 'WhatsApp not connected' })
+  }
+  try {
+    const groups = await whatsappClient.getGroupChats()
+    return res.json({ success: true, groups })
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch groups')
+    return res.status(500).json({ success: false, error: 'Failed to fetch groups' })
+  }
+})
+
+// Send message - now supports both phone numbers and JIDs
+const sendBodySchema = z.object({ 
+  number: z.string().optional(), 
+  jid: z.string().optional(),
+  message: z.string() 
+}).refine(data => data.number || data.jid, {
+  message: "Either 'number' or 'jid' must be provided"
+})
+
 app.post('/send', async (req, res) => {
   const parse = sendBodySchema.safeParse(req.body)
   if (!parse.success) {
-    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+    return res.status(400).json({ success: false, error: 'Invalid request parameters. Either number or jid must be provided.' })
   }
   if (whatsappClient.getConnectionStatus() !== 'connected') {
     return res.status(503).json({ success: false, error: 'WhatsApp not connected' })
@@ -79,7 +100,19 @@ app.post('/send', async (req, res) => {
   try {
     const sock = whatsappClient.getSocket()
     if (!sock) throw new Error('Socket not available')
-    const jid = `${parse.data.number.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+    
+    // Determine the JID to use
+    let jid: string
+    if (parse.data.jid) {
+      // Use the provided JID directly (for groups or already formatted numbers)
+      jid = parse.data.jid
+    } else if (parse.data.number) {
+      // Format the phone number as a JID
+      jid = `${parse.data.number.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+    } else {
+      throw new Error('No recipient specified')
+    }
+    
     await sock.sendMessage(jid, { text: parse.data.message })
     return res.json({ success: true, message: 'Message sent successfully' })
   } catch (err) {
@@ -115,25 +148,31 @@ app.get('/scheduled', (req, res) => {
 })
 
 const createScheduledSchema = z.object({
-  number: z.string(),
+  number: z.string().optional(),
+  jid: z.string().optional(),
   message: z.string(),
   schedule: z.string(),
   description: z.string().optional(),
   oneTime: z.boolean().optional()
+}).refine(data => data.number || data.jid, {
+  message: "Either 'number' or 'jid' must be provided"
 })
+
 app.post('/scheduled', (req, res) => {
   const parse = createScheduledSchema.safeParse(req.body)
   if (!parse.success) {
-    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+    return res.status(400).json({ success: false, error: 'Invalid request parameters. Either number or jid must be provided.' })
   }
   try {
-    const data = {
-      number: parse.data.number,
+    const data: Parameters<typeof scheduler.create>[0] = {
       message: parse.data.message,
       schedule: parse.data.schedule,
       description: parse.data.description ?? '',
       oneTime: parse.data.oneTime ?? false
     }
+    if (parse.data.number) data.number = parse.data.number
+    if (parse.data.jid) data.jid = parse.data.jid
+    
     const msg = scheduler.create(data)
     res.json({ success: true, message: 'Scheduled message created', scheduledMessage: msg })
   } catch (err) {
@@ -143,6 +182,7 @@ app.post('/scheduled', (req, res) => {
 
 const updateScheduledSchema = z.object({
   number: z.string().optional(),
+  jid: z.string().optional(),
   message: z.string().optional(),
   schedule: z.string().optional(),
   scheduleDate: z.string().optional(),
@@ -158,6 +198,7 @@ app.put('/scheduled/:id', (req, res) => {
   try {
     const updates: any = {}
     if (parse.data.number !== undefined) updates.number = parse.data.number
+    if (parse.data.jid !== undefined) updates.jid = parse.data.jid
     if (parse.data.message !== undefined) updates.message = parse.data.message
     if (parse.data.schedule !== undefined) updates.schedule = parse.data.schedule
     if (parse.data.scheduleDate !== undefined) updates.scheduleDate = parse.data.scheduleDate
@@ -186,24 +227,30 @@ app.post('/scheduled/:id/toggle', (req, res) => {
 
 // Schedule a one-time message at a specific date/time
 const scheduleDateSchema = z.object({
-  number: z.string(),
+  number: z.string().optional(),
+  jid: z.string().optional(),
   message: z.string(),
   scheduleDate: z.string(), // ISO 8601 date string
   description: z.string().optional()
+}).refine(data => data.number || data.jid, {
+  message: "Either 'number' or 'jid' must be provided"
 })
 
 app.post('/scheduleDate', (req, res) => {
   const parse = scheduleDateSchema.safeParse(req.body)
   if (!parse.success) {
-    return res.status(400).json({ success: false, error: 'Invalid request parameters' })
+    return res.status(400).json({ success: false, error: 'Invalid request parameters. Either number or jid must be provided.' })
   }
   try {
-    const msg = scheduler.createDateSchedule({
-      number: parse.data.number,
+    const data: Parameters<typeof scheduler.createDateSchedule>[0] = {
       message: parse.data.message,
       scheduleDate: parse.data.scheduleDate,
       description: parse.data.description || ''
-    })
+    }
+    if (parse.data.number) data.number = parse.data.number
+    if (parse.data.jid) data.jid = parse.data.jid
+    
+    const msg = scheduler.createDateSchedule(data)
     res.json({ success: true, message: 'Date-based scheduled message created', scheduledMessage: msg })
   } catch (err) {
     return res.status(400).json({ success: false, error: (err as Error).message })

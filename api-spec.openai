@@ -91,10 +91,52 @@ paths:
                           - "Already authenticated"
                           - "QR code not available yet, please wait..."
 
+  /groups:
+    get:
+      summary: Get WhatsApp groups
+      description: Returns a list of all WhatsApp groups the user is part of
+      operationId: getGroups
+      tags:
+        - Groups
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        jid:
+                          type: string
+                          description: Group JID (unique identifier)
+                          example: "120363147258369076@g.us"
+                        name:
+                          type: string
+                          description: Group name
+                          example: "Family Group"
+                        participants:
+                          type: integer
+                          description: Number of participants in the group
+                          example: 10
+        '503':
+          description: WhatsApp not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /send:
     post:
       summary: Send immediate WhatsApp message
-      description: Sends a WhatsApp message immediately to the specified number
+      description: Sends a WhatsApp message immediately to the specified number or group JID
       operationId: sendMessage
       tags:
         - Messaging
@@ -105,13 +147,16 @@ paths:
             schema:
               type: object
               required:
-                - number
                 - message
               properties:
                 number:
                   type: string
-                  description: Phone number without country code prefix
+                  description: Phone number without country code prefix (either number or jid must be provided)
                   example: "1234567890"
+                jid:
+                  type: string
+                  description: WhatsApp JID for groups or direct formatted numbers (either number or jid must be provided)
+                  example: "120363147258369076@g.us"
                 message:
                   type: string
                   description: Message content to send
@@ -201,14 +246,17 @@ paths:
             schema:
               type: object
               required:
-                - number
                 - message
                 - schedule
               properties:
                 number:
                   type: string
-                  description: Phone number without country code prefix
+                  description: Phone number without country code prefix (either number or jid must be provided)
                   example: "1234567890"
+                jid:
+                  type: string
+                  description: WhatsApp JID for groups or direct formatted numbers (either number or jid must be provided)
+                  example: "120363147258369076@g.us"
                 message:
                   type: string
                   description: Message content to send
@@ -271,7 +319,10 @@ paths:
               properties:
                 number:
                   type: string
-                  description: Phone number
+                  description: Phone number (optional if jid provided)
+                jid:
+                  type: string
+                  description: WhatsApp JID for groups or direct formatted numbers
                 message:
                   type: string
                   description: Message content
@@ -399,14 +450,17 @@ paths:
             schema:
               type: object
               required:
-                - number
                 - message
                 - scheduleDate
               properties:
                 number:
                   type: string
-                  description: Phone number without country code prefix
+                  description: Phone number without country code prefix (either number or jid must be provided)
                   example: "1234567890"
+                jid:
+                  type: string
+                  description: WhatsApp JID for groups or direct formatted numbers (either number or jid must be provided)
+                  example: "120363147258369076@g.us"
                 message:
                   type: string
                   description: Message content to send
@@ -604,8 +658,12 @@ components:
           example: "123e4567-e89b-12d3-a456-426614174000"
         number:
           type: string
-          description: Phone number
+          description: Phone number (optional if jid is provided)
           example: "1234567890"
+        jid:
+          type: string
+          description: WhatsApp JID for groups or direct formatted numbers (optional if number is provided)
+          example: "120363147258369076@g.us"
         message:
           type: string
           description: Message content
@@ -662,6 +720,8 @@ tags:
     description: System status and health endpoints
   - name: Authentication
     description: WhatsApp authentication and QR code endpoints
+  - name: Groups
+    description: WhatsApp group management
   - name: Messaging
     description: Immediate message sending
   - name: Scheduled Messages

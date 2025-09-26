@@ -8,7 +8,8 @@ import type { ConnectionStatus, WhatsAppClient } from './whatsapp.js'
 
 export const scheduledMessageSchema = z.object({
   id: z.string(),
-  number: z.string(),
+  number: z.string().optional(),
+  jid: z.string().optional(),
   message: z.string(),
   schedule: z.string(),
   description: z.string().optional().default(''),
@@ -87,7 +88,7 @@ export class SchedulerService {
         try {
           const sock = this.whatsappClient.getSocket()
           if (!sock) return
-          const jid = this.formatJid(msg.number)
+          const jid = this.formatJid(msg)
           await sock.sendMessage(jid, { text: msg.message })
           this.logger.info({ id: msg.id }, 'Scheduled message sent')
           if (msg.oneTime) {
@@ -141,7 +142,7 @@ export class SchedulerService {
     try {
       const sock = this.whatsappClient.getSocket()
       if (!sock) return
-      const jid = this.formatJid(msg.number)
+      const jid = this.formatJid(msg)
       await sock.sendMessage(jid, { text: msg.message })
       this.logger.info({ id: msg.id }, 'Scheduled message sent')
       this.markAsExecuted(msg.id)
@@ -162,9 +163,17 @@ export class SchedulerService {
     }
   }
 
-  private formatJid(number: string) {
-    const trimmed = number.replace(/[^0-9]/g, '')
-    return `${trimmed}@s.whatsapp.net`
+  private formatJid(msg: ScheduledMessage): string {
+    if (msg.jid) {
+      // Use the provided JID directly (for groups or already formatted numbers)
+      return msg.jid
+    } else if (msg.number) {
+      // Format the phone number as a JID
+      const trimmed = msg.number.replace(/[^0-9]/g, '')
+      return `${trimmed}@s.whatsapp.net`
+    } else {
+      throw new Error('No recipient specified')
+    }
   }
 
   private restoreJobs() {
@@ -173,14 +182,18 @@ export class SchedulerService {
     }
   }
 
-  public create(input: { number: string; message: string; schedule: string; description?: string; oneTime?: boolean }): ScheduledMessage {
+  public create(input: { number?: string; jid?: string; message: string; schedule: string; description?: string; oneTime?: boolean }): ScheduledMessage {
     if (!cron.validate(input.schedule)) {
       throw new Error('Invalid cron expression')
+    }
+    if (!input.number && !input.jid) {
+      throw new Error('Either number or jid must be provided')
     }
     const now = new Date().toISOString()
     const msg: ScheduledMessage = {
       id: uuidv4(),
       number: input.number,
+      jid: input.jid,
       message: input.message,
       schedule: input.schedule,
       description: input.description || '',
@@ -196,11 +209,15 @@ export class SchedulerService {
     return msg
   }
   
-  public createDateSchedule(input: { number: string; message: string; scheduleDate: string; description?: string }): ScheduledMessage {
+  public createDateSchedule(input: { number?: string; jid?: string; message: string; scheduleDate: string; description?: string }): ScheduledMessage {
     // Validate the date
     const scheduledTime = new Date(input.scheduleDate)
     if (isNaN(scheduledTime.getTime())) {
       throw new Error('Invalid date format')
+    }
+    
+    if (!input.number && !input.jid) {
+      throw new Error('Either number or jid must be provided')
     }
     
     // Check if date is in the past (allow 1 minute grace period)
@@ -213,6 +230,7 @@ export class SchedulerService {
     const msg: ScheduledMessage = {
       id: uuidv4(),
       number: input.number,
+      jid: input.jid,
       message: input.message,
       schedule: '', // Empty for date-based schedules
       scheduleDate: input.scheduleDate,
@@ -247,7 +265,8 @@ export class SchedulerService {
     
     const next: ScheduledMessage = {
       id: prev.id,
-      number: updates.number ?? prev.number,
+      number: updates.number !== undefined ? updates.number : prev.number,
+      jid: updates.jid !== undefined ? updates.jid : prev.jid,
       message: updates.message ?? prev.message,
       schedule: updates.schedule ?? prev.schedule,
       scheduleDate: updates.scheduleDate ?? prev.scheduleDate,
@@ -257,6 +276,11 @@ export class SchedulerService {
       executed: updates.executed ?? prev.executed,
       created: prev.created,
       updated: new Date().toISOString()
+    }
+    
+    // Validate that at least one recipient (number or jid) remains after update
+    if (!next.number && !next.jid) {
+      throw new Error('Either number or jid must be provided')
     }
     this.messages[idx] = next
     this.save()

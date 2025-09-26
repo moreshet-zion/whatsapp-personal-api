@@ -90,6 +90,29 @@ export class WhatsAppClient {
     this.qrState = {}
     await this.start()
   }
+
+  public async getGroupChats(): Promise<Array<{ jid: string; name: string; participants: number }>> {
+    if (this.status !== 'connected' || !this.socket) {
+      throw new Error('WhatsApp not connected')
+    }
+    
+    try {
+      // Get all chats
+      const chats = await this.socket.groupFetchAllParticipating()
+      
+      // Transform the group data into a simpler format
+      const groups = Object.entries(chats).map(([jid, group]) => ({
+        jid,
+        name: group.subject || 'Unnamed Group',
+        participants: group.participants ? group.participants.length : 0
+      }))
+      
+      return groups
+    } catch (err) {
+      this.logger.error({ err }, 'Failed to fetch group chats')
+      throw new Error('Failed to fetch group chats')
+    }
+  }
 }
 
 
