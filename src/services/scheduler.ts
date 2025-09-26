@@ -265,8 +265,8 @@ export class SchedulerService {
     
     const next: ScheduledMessage = {
       id: prev.id,
-      number: updates.number ?? prev.number,
-      jid: updates.jid ?? prev.jid,
+      number: updates.number !== undefined ? updates.number : prev.number,
+      jid: updates.jid !== undefined ? updates.jid : prev.jid,
       message: updates.message ?? prev.message,
       schedule: updates.schedule ?? prev.schedule,
       scheduleDate: updates.scheduleDate ?? prev.scheduleDate,
@@ -276,6 +276,11 @@ export class SchedulerService {
       executed: updates.executed ?? prev.executed,
       created: prev.created,
       updated: new Date().toISOString()
+    }
+    
+    // Validate that at least one recipient (number or jid) remains after update
+    if (!next.number && !next.jid) {
+      throw new Error('Either number or jid must be provided')
     }
     this.messages[idx] = next
     this.save()
