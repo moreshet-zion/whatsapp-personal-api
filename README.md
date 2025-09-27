@@ -1,18 +1,19 @@
 # WhatsApp Personal API with Scheduling
 
-A personal WhatsApp API server with scheduled messaging, built on Express + Baileys. Perfect for birthday reminders, regular check‑ins, and automated notifications.
+A comprehensive WhatsApp API server with advanced scheduling, pub/sub messaging, and group support. Perfect for personal automation, team communication, birthday reminders, and broadcast messaging.
 
 ## ✨ Features
 
-- 📱 Send immediate WhatsApp messages via REST API
-- ⏰ Schedule recurring messages (daily, weekly, monthly)
-- 🎂 One‑time scheduled messages
-- 🔄 Pause/resume schedules
-- 📊 Connection health endpoint
-- 🔐 QR code authentication (+ HTML QR page)
-- 💾 Persistent storage for sessions and schedules
-- 📣 Topic-based pub/sub broadcasts with throttled delivery
-- 🛡️ API key authentication
+- 📱 **Instant Messaging**: Send immediate messages to individuals and groups
+- ⏰ **Smart Scheduling**: Cron-based recurring and date-based one-time messages  
+- 📣 **Pub/Sub System**: Broadcast messages to multiple subscribers with topics
+- 👥 **Group Support**: Full WhatsApp group messaging capabilities
+- 🔄 **Task Management**: Activate/deactivate schedules without losing them
+- 📊 **Bulk Operations**: Manage multiple schedules efficiently
+- 🔐 **Secure Authentication**: API key and bearer token support
+- 💾 **Persistent Storage**: Reliable data persistence for sessions and schedules
+- 🌐 **Production Ready**: Docker, Fly.io deployment configurations included
+- 📚 **Complete Documentation**: Comprehensive guides and API reference
 
 ## 🚀 Quick Start
 
@@ -55,41 +56,41 @@ All endpoints require an API key:
 
 Configure comma‑separated keys via `API_TOKENS`.
 
-## 📋 API Endpoints
+## 📋 API Overview
 
-See `api-spec.openai` for schema details.
+### System & Health
+- `GET /health` — Connection status and system information
+- `GET /qr`, `GET /qr-image` — WhatsApp QR code for authentication  
+- `POST /restart` — Restart WhatsApp session
+- `GET /groups` — List WhatsApp groups
 
-System
-- GET `/health` — Connection status and counts
-- GET `/qr` — JSON QR payload (when not authenticated)
-- GET `/qr-image` — HTML QR page
-- POST `/restart` — Restart WhatsApp session
+### Messaging
+- `POST /send` — Send immediate messages to individuals or groups
 
-Messaging
-- POST `/send` — Send an immediate message
+### Scheduled Messages  
+- `GET /scheduled` — List with filtering options
+- `POST /scheduled` — Create cron-based recurring schedules
+- `POST /scheduleDate` — Create date-based one-time schedules
+- `PUT /scheduled/{id}` — Update schedules
+- `DELETE /scheduled/{id}` — Delete schedules  
+- `POST /scheduled/{id}/toggle` — Activate/deactivate schedules
+- `POST /scheduled/bulk` — Bulk operations (activate/deactivate/delete)
 
-Scheduled Messages
-- GET `/scheduled` — List all
-- POST `/scheduled` — Create
-- PUT `/scheduled/:id` — Update
-- DELETE `/scheduled/:id` — Delete
-- POST `/scheduled/:id/toggle` — Activate/Deactivate
+### Pub/Sub Broadcasting
+- `GET /pubsub/topics` — List all topics
+- `POST /pubsub/topics` — Create topics
+- `GET /pubsub/topics/{id}` — Get topic details
+- `DELETE /pubsub/topics/{id}` — Delete topics
+- `POST /pubsub/topics/{id}/subscribers` — Subscribe phone numbers
+- `DELETE /pubsub/topics/{id}/subscribers` — Unsubscribe phone numbers  
+- `GET /pubsub/subscriptions/{number}` — Check subscription status
+- `POST /pubsub/publish` — Broadcast messages to topic subscribers
+- `GET /pubsub/settings` — View/update broadcast settings
 
-Pub/Sub
-- GET `/pubsub/topics` — List topics
-- POST `/pubsub/topics` — Create a topic
-- DELETE `/pubsub/topics/:id` — Delete a topic
-- GET `/pubsub/topics/:id` — Topic details (with subscribers)
-- GET `/pubsub/topics/:id/subscribers` — List subscribers for a topic
-- POST `/pubsub/topics/:id/subscribers` — Subscribe a phone number
-- DELETE `/pubsub/topics/:id/subscribers` — Unsubscribe a phone number
-- GET `/pubsub/subscriptions/:number` — List topics for a phone number
-- POST `/pubsub/publish` — Broadcast a message to a topic
-- GET `/pubsub/settings` — View pub/sub settings
-- PUT `/pubsub/settings` — Update pub/sub settings (e.g., delivery delay)
+### Utilities
+- `GET /schedule-examples` — Cron expression examples and help
 
-Utilities
-- GET `/schedule-examples`
+📖 **Complete API Documentation**: See [API Reference](docs/API_REFERENCE.md) for detailed schemas and examples.
 
 ## 💡 Usage Examples
 
@@ -157,7 +158,7 @@ curl -X POST http://localhost:3000/scheduled/<ID>/toggle \
   -H "x-api-key: <API_KEY>"
 ```
 
-More examples in `docs/TEST_CALLS.md`.
+📖 **More Examples**: See [Test Calls Guide](docs/TEST_CALLS.md) for comprehensive curl examples.
 
 ## ⏰ Cron Tips
 
@@ -204,7 +205,34 @@ docker run -p 3000:8080 \
 - Monitor `/health` and logs for connection state.
 - Baileys does not expose throttling controls, so the pub/sub sender enforces your configured delay between each recipient to avoid spamming WhatsApp.
 
+## 📚 Documentation
+
+### Quick Start
+- 🚀 **[Getting Started](docs/GETTING_STARTED.md)** - Setup and first steps
+- 📋 **[API Reference](docs/API_REFERENCE.md)** - Complete endpoint documentation
+- 🧪 **[Test Calls](docs/TEST_CALLS.md)** - curl examples and testing
+
+### Feature Guides  
+- ⏰ **[Scheduling Guide](docs/SCHEDULING_GUIDE.md)** - Master cron and date-based scheduling
+- 📣 **[Pub/Sub Guide](docs/PUBSUB_GUIDE.md)** - Broadcasting and topic management
+- 👥 **[Group Messaging](docs/GROUP_MESSAGING.md)** - Send to WhatsApp groups
+- 🚀 **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment options
+- 🔧 **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+### Reference
+- 📄 **[OpenAPI Spec](api-spec.openai)** - Import into Postman/Insomnia
+- 🔧 **[Task Management Features](TASK_MANAGEMENT_FEATURES.md)** - Schedule management
+
+## 🛡️ Best Practices
+
+- **Personal Use Only**: Respect WhatsApp Terms of Service
+- **API Security**: Keep API keys secret, rotate regularly  
+- **Data Backup**: Persist `sessions/` and `data/` directories
+- **Rate Limiting**: Use pub/sub delays to avoid WhatsApp limits
+- **Health Monitoring**: Monitor `/health` endpoint in production
+
 ## 📚 References
 
-- Baileys docs: https://baileys.wiki/docs/intro/
-- Repository: https://github.com/WhiskeySockets/Baileys
+- **Baileys Library**: https://baileys.wiki/docs/intro/
+- **Cron Expressions**: https://crontab.guru
+- **WhatsApp Business API**: https://developers.facebook.com/docs/whatsapp
