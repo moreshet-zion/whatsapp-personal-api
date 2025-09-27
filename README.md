@@ -1,401 +1,404 @@
-# Message Interception and Routing System
+# WhatsApp Message Interception & Conversation Management Service
 
-A highly modular and scalable system for intercepting, routing, and processing messages with AI agent integration. Designed with flexibility in mind, supporting multiple storage backends, AI engines, and custom routing logic.
+A **TypeScript-based service** that adds intelligent message interception, routing, and AI-powered conversation management to your existing WhatsApp API infrastructure.
 
-## 🏗️ Architecture Overview
+## 🎯 Purpose
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Message Interception Layer               │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │            Message Interceptor                       │   │
-│  │  - Pre-processing                                   │   │
-│  │  - Queue management                                 │   │
-│  │  - Post-processing                                  │   │
-│  └──────────────────┬──────────────────────────────────┘   │
-└─────────────────────┼───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Routing Layer                          │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │            Message Router                           │   │
-│  │  - Custom routing rules                            │   │
-│  │  - Pattern matching                                │   │
-│  │  - Keyword detection                               │   │
-│  │  - Conversation detection                          │   │
-│  └──────────────────┬──────────────────────────────────┘   │
-└─────────────────────┼───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Conversation Management                    │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │         Conversation Manager                        │   │
-│  │  - Conversation lifecycle                          │   │
-│  │  - History tracking                                │   │
-│  │  - State management                                │   │
-│  │  - Analytics                                       │   │
-│  └──────────────────┬──────────────────────────────────┘   │
-└─────────────────────┼───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    AI Agent Layer                           │
-│  ┌──────────────┬──────────────┬──────────────────────┐   │
-│  │ Support Agent│ Sales Agent  │ Custom Agents        │   │
-│  │              │              │                      │   │
-│  │  Personas    │  Personas    │  Personas           │   │
-│  └──────┬───────┴──────┬───────┴──────┬───────────────┘   │
-│         │              │              │                    │
-│  ┌──────▼──────────────▼──────────────▼───────────────┐   │
-│  │            AI Engine Abstraction                    │   │
-│  │  ┌────────┬────────┬────────┬──────────────────┐  │   │
-│  │  │OpenAI  │Claude  │Gemini  │Local/Custom      │  │   │
-│  │  └────────┴────────┴────────┴──────────────────┘  │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Storage Layer                            │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │           Storage Abstraction                       │   │
-│  │  ┌──────────────┐     ┌──────────────────────┐    │   │
-│  │  │ Local Files  │ ←→  │      Redis           │    │   │
-│  │  └──────────────┘     └──────────────────────┘    │   │
-│  │         Seamless Migration Path                     │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
+This service is designed to **extend** your existing WhatsApp API with:
+- **Incoming message interception** and intelligent routing
+- **AI-powered conversation management** with multiple agent personas
+- **Enhanced pub/sub** that can initiate conversations with topic subscribers
+- **Scalable architecture** (local storage → Redis when ready)
 
 ## ✨ Key Features
 
-### 1. **Message Interception**
-- Centralized entry point for all incoming messages
-- Pre and post-processing pipelines
-- Asynchronous message queue processing
-- Message status tracking
+### 1. **Message Interception & Routing**
+- Intercept incoming WhatsApp messages
+- Route based on keywords, patterns, or custom logic
+- Automatically detect and continue existing conversations
+- Support for department-based routing
 
-### 2. **Intelligent Routing**
-- **Custom routing rules** with priority-based execution
-- **Keyword-based routing** for topic detection
-- **Pattern matching** with regex support
-- **Conversation continuity** detection
-- **Pluggable routing logic** for custom implementations
+### 2. **AI-Powered Conversations**
+- Multiple AI engine support (OpenAI, Claude, Mock for testing)
+- Specialized agent personas (Support, Sales, Custom)
+- Conversation context management
+- Automatic response generation
 
-### 3. **Conversation Management**
-- Full conversation lifecycle management
-- Message history tracking
-- Conversation state persistence
-- Analytics and insights
-- Automatic timeout handling
+### 3. **Enhanced Pub/Sub**
+- Publish messages to topic subscribers
+- **NEW**: Initiate AI conversations with each subscriber
+- Campaign management
+- Batch conversation initiation
 
-### 4. **AI Agent Abstraction**
-- **Multiple agent personas** with unique personalities
-- **Multi-engine support** (OpenAI, Claude, Gemini, etc.)
-- **Engine hot-swapping** capability
-- **Specialized agents** for different tasks
-- **Tool integration** for enhanced capabilities
+### 4. **Flexible Storage**
+- Start with local file storage
+- Seamlessly migrate to Redis when scaling
+- Same API regardless of backend
 
-### 5. **Scalable Storage**
-- **Local file storage** for development
-- **Redis support** for production
-- **Hybrid storage** with migration capabilities
-- **Redis-compatible API** for seamless scaling
-- TTL support for automatic cleanup
+## 🏗️ Architecture
+
+```
+Your WhatsApp API
+       ↓
+[Message Interception Layer]
+       ↓
+[Routing Engine] → [Conversation Manager] → [AI Agents]
+       ↓                    ↓                     ↓
+[Storage Layer] ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ↓
+```
+
+## 📦 Installation
+
+```bash
+npm install
+
+# For development
+npm run dev
+
+# For production
+npm run build
+npm start
+```
 
 ## 🚀 Quick Start
 
-### Installation
+### 1. Basic Setup
 
-```bash
-# Clone the repository
-git clone <repository-url>
-cd message_system
+```typescript
+import { 
+  WhatsAppInterceptionService,
+  ServiceConfig 
+} from './src/WhatsAppInterceptionService';
 
-# Install dependencies
-pip install -r requirements.txt
+// Your existing WhatsApp API
+const whatsappAPI = {
+  async sendMessage(to: string, message: string) {
+    // Your implementation
+    return { messageId: 'xxx', status: 'sent' };
+  },
+  // ... other methods
+};
 
-# Create necessary directories
-mkdir -p data/storage logs
+const config: ServiceConfig = {
+  storage: {
+    type: 'local' // or 'redis'
+  },
+  whatsapp: {
+    botPhoneNumber: '+1234567890',
+    api: whatsappAPI
+  },
+  ai: {
+    defaultEngine: 'openai',
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: 'gpt-4'
+    }
+  }
+};
+
+const service = new WhatsAppInterceptionService(config);
+await service.start();
 ```
 
-### Basic Usage
+### 2. Process Incoming Messages
 
-```python
-import asyncio
-from message_system.core.message import Message
-from message_system.interceptor.message_interceptor import MessageInterceptor
-from message_system.routing.router import CustomizableRouter
-from message_system.conversation.manager import ConversationManager
-from message_system.agents.base_agent import PersonaAgent
-from message_system.agents.engines import EngineFactory
-from message_system.storage.backends import LocalFileStorage
+```typescript
+// When you receive a WhatsApp message
+const incomingMessage = {
+  id: 'msg123',
+  from: '+user_phone',
+  to: '+bot_phone',
+  content: 'Hello, I need help',
+  type: 'text',
+  timestamp: new Date()
+};
 
-async def main():
-    # Initialize storage
-    storage = LocalFileStorage("./data/storage")
-    
-    # Setup router
-    router = CustomizableRouter(storage)
-    
-    # Setup conversation manager
-    conversation_manager = ConversationManager(storage)
-    
-    # Create an AI agent
-    engine = EngineFactory.create_engine("local")
-    agent = PersonaAgent(
-        "assistant",
-        persona={
-            "name": "Assistant",
-            "role": "AI Helper",
-            "personality": "Helpful and friendly"
-        },
-        engine=engine
-    )
-    
-    # Setup interceptor
-    interceptor = MessageInterceptor(
-        router=router,
-        conversation_manager=conversation_manager,
-        default_agent=agent
-    )
-    
-    # Process a message
-    message = Message(
-        sender_id="user123",
-        recipient_id="bot",
-        content="Hello, I need help!"
-    )
-    
-    response = await interceptor.intercept(message)
-    print(f"Response: {response.content}")
+// Process through interception service
+const response = await service.processIncomingMessage(incomingMessage);
 
-asyncio.run(main())
+// Response is automatically sent via your WhatsApp API
 ```
 
-## 🔧 Configuration
+### 3. Initiate Conversations (Pub/Sub Enhancement)
 
-### YAML Configuration
+```typescript
+// Subscribe users to a topic
+await service.subscribeToTopic('customers', '+1111111111');
+await service.subscribeToTopic('customers', '+2222222222');
 
-The system supports comprehensive YAML configuration:
-
-```yaml
-# config/system_config.yaml
-storage:
-  type: "local"
-  local:
-    base_path: "./data/storage"
-
-router:
-  conversation_timeout: 1800
-  keyword_routes:
-    - keywords: ["support", "help"]
-      agent: "support_agent"
-      priority: 80
-
-agents:
-  support_agent:
-    persona:
-      name: "Alex"
-      role: "Support Specialist"
-    engine: "openai"
+// Send message and start AI conversation with each subscriber
+await service.publishToTopic(
+  'customers',
+  'Hi! We have a special offer for you. Reply to learn more!',
+  true, // Initiate conversation
+  {
+    conversationType: 'sales',
+    agentId: 'sales-agent',
+    config: {
+      allowUserResponse: true,
+      autoCloseAfter: 60 // minutes
+    }
+  }
+);
 ```
 
-### Custom Routing Rules
+### 4. Custom Routing Rules
 
-```python
-# Add custom routing logic
-async def custom_router(message: Message):
-    if "urgent" in message.content.lower():
-        return RoutingDecision(
-            should_process=True,
-            create_new_conversation=True,
-            metadata={"priority": "high"}
-        )
-    return None
+```typescript
+// Add department routing
+service.addRoutingRule(
+  'billing-department',
+  (message) => message.content.includes('invoice') || message.content.includes('payment'),
+  (message) => ({
+    shouldProcess: true,
+    action: 'start_conversation',
+    agentId: 'billing-agent',
+    reason: 'Billing inquiry detected'
+  })
+);
 
-await router.register_rule("urgency_check", custom_router)
+// VIP customer routing
+service.addRoutingRule(
+  'vip-routing',
+  (message) => vipCustomers.includes(message.from),
+  (message) => ({
+    shouldProcess: true,
+    action: 'start_conversation',
+    agentId: 'vip-agent',
+    priority: 100,
+    reason: 'VIP customer'
+  })
+);
 ```
 
-### Multiple AI Engines
+## 🤖 AI Agent Configuration
 
-```python
-# Configure multiple engines
-openai_engine = EngineFactory.create_engine("openai", {
-    "api_key": "your-key",
-    "model": "gpt-4"
-})
+### Built-in Agents
 
-claude_engine = EngineFactory.create_engine("claude", {
-    "api_key": "your-key",
-    "model": "claude-3"
-})
+```typescript
+// Support Agent
+const supportAgent = new SupportAgent('support-agent', logger, aiEngine);
 
-# Create multi-engine agent
-agent = MultiEngineAgent("assistant", persona)
-agent.add_engine("openai", openai_engine)
-agent.add_engine("claude", claude_engine)
+// Sales Agent  
+const salesAgent = new SalesAgent('sales-agent', logger, aiEngine);
+
+// Custom Agent
+const customAgent = new Agent(
+  'custom-agent',
+  {
+    name: 'Custom Assistant',
+    role: 'Specialized Helper',
+    personality: 'Professional and knowledgeable',
+    instructions: 'Your specific instructions here',
+    responseStyle: {
+      tone: 'formal',
+      useEmojis: false,
+      maxLength: 300
+    }
+  },
+  logger,
+  aiEngine
+);
 ```
 
-## 📊 Storage Migration
+### AI Engines
 
-The system provides a seamless migration path from local files to Redis:
+```typescript
+// OpenAI
+const openaiEngine = AIEngineFactory.createEngine('openai', {
+  apiKey: 'your-key',
+  model: 'gpt-4'
+}, logger);
 
-```python
-# Start with local storage
-local_storage = LocalFileStorage("./data")
+// Claude
+const claudeEngine = AIEngineFactory.createEngine('claude', {
+  apiKey: 'your-key',
+  model: 'claude-3'
+}, logger);
 
-# When ready to scale, add Redis
-redis_storage = RedisStorage("localhost", 6379)
-
-# Use hybrid storage for migration
-hybrid = HybridStorage(
-    primary=local_storage,
-    secondary=redis_storage
-)
-
-# Enable sync
-await hybrid.enable_sync()
-
-# Migrate data
-await hybrid.migrate_to_secondary()
+// Mock (for testing)
+const mockEngine = AIEngineFactory.createEngine('mock', {
+  responses: {
+    'hello': 'Hi there!',
+    'help': 'How can I assist you?'
+  }
+}, logger);
 ```
 
-## 🎯 Use Cases
+## 📊 Conversation Management
 
-1. **Customer Support Bot**
-   - Route support queries to specialized agents
-   - Maintain conversation context
-   - Escalate complex issues
+### Get Conversation Statistics
 
-2. **Sales Assistant**
-   - Handle product inquiries
-   - Process purchase requests
-   - Provide personalized recommendations
+```typescript
+const stats = await service.getConversationStats(conversationId);
+// Returns: duration, messageCount, avgResponseTime, tags
 
-3. **Multi-Channel Communication**
-   - Process messages from various channels
-   - Maintain unified conversation history
-   - Consistent responses across platforms
+const activeConvs = await service.listActiveConversations({
+  agentId: 'support-agent',
+  state: 'active'
+});
+```
 
-4. **Enterprise Chatbot Platform**
-   - Deploy multiple specialized agents
-   - Custom routing based on business rules
-   - Scalable infrastructure with Redis
+### Campaign Management
+
+```typescript
+await service.conversationPublisher.createCampaign({
+  name: 'Summer Sale',
+  topicId: 'customers',
+  message: 'Summer sale starts now! 50% off everything!',
+  conversationType: 'sales',
+  agentId: 'sales-agent',
+  schedule: new Date('2024-06-01T10:00:00'),
+  metadata: {
+    campaign_type: 'promotional'
+  }
+});
+```
+
+## 🔄 Storage Migration Path
+
+### Phase 1: Local Development
+```typescript
+storage: {
+  type: 'local',
+  localPath: './data/storage'
+}
+```
+
+### Phase 2: Production with Redis
+```typescript
+storage: {
+  type: 'redis',
+  redis: {
+    host: 'localhost',
+    port: 6379,
+    password: 'your-password'
+  }
+}
+```
 
 ## 📁 Project Structure
 
 ```
-message_system/
-├── core/
-│   ├── __init__.py
-│   ├── message.py          # Message data structures
-│   └── interfaces.py       # Core interfaces
-├── interceptor/
-│   └── message_interceptor.py  # Message interception logic
-├── routing/
-│   └── router.py           # Routing implementations
-├── conversation/
-│   └── manager.py          # Conversation management
-├── agents/
-│   ├── base_agent.py       # Agent implementations
-│   └── engines.py          # AI engine integrations
-├── storage/
-│   └── backends.py         # Storage implementations
-└── config/
-    └── system_config.yaml  # System configuration
+/workspace/
+├── src/
+│   ├── core/              # Core types and interfaces
+│   ├── routing/           # Message routing logic
+│   ├── conversation/      # Conversation management
+│   ├── interceptor/       # Message interception
+│   ├── agents/            # AI agents and engines
+│   ├── storage/           # Storage backends
+│   ├── pubsub/           # Pub/sub with conversation initiation
+│   └── WhatsAppInterceptionService.ts  # Main service
+├── examples/              # Usage examples
+├── package.json
+└── tsconfig.json
 ```
 
-## 🔌 Extending the System
+## 🎯 Use Cases
 
-### Adding a New AI Engine
+1. **Customer Support Automation**
+   - Route support queries to specialized agents
+   - Maintain conversation context
+   - Escalate to human agents when needed
 
-```python
-class CustomEngine(BaseEngine):
-    async def generate_response(self, message, history, context):
-        # Your implementation
-        return response_message
+2. **Sales & Marketing Campaigns**
+   - Send promotional messages to subscribers
+   - Start AI-powered sales conversations
+   - Track engagement and conversions
+
+3. **Notification System with Engagement**
+   - Send notifications that can turn into conversations
+   - Allow users to respond and get AI assistance
+   - Auto-close after specified time
+
+4. **Multi-Department Business**
+   - Route to billing, support, sales departments
+   - Different AI personas for each department
+   - Unified conversation history
+
+## 🔌 Integration with Existing System
+
+This service is designed to work **alongside** your existing WhatsApp API:
+
+```typescript
+// Your existing WhatsApp webhook
+app.post('/webhook/whatsapp', async (req, res) => {
+  const message = req.body;
+  
+  // NEW: Process through interception service
+  const response = await interceptionService.processIncomingMessage(message);
+  
+  // Your existing logic continues...
+  await yourExistingLogic(message);
+  
+  res.sendStatus(200);
+});
+
+// Your existing pub/sub
+async function publishToSubscribers(topicId: string, message: string) {
+  // NEW: Use enhanced pub/sub with conversation initiation
+  await interceptionService.publishToTopic(
+    topicId,
+    message,
+    true, // Enable AI conversations
+    { conversationType: 'notification' }
+  );
+}
 ```
 
-### Creating Specialized Agents
+## 📊 Events
 
-```python
-class TranslationAgent(SpecializedAgent):
-    def __init__(self):
-        super().__init__(
-            agent_id="translator",
-            persona={"name": "Translator"},
-            specialization="translation"
-        )
-    
-    async def process_message(self, message, context):
-        # Translation logic
-        return translated_response
+The service emits various events for monitoring:
+
+```typescript
+service.on('message:processed', ({ message, response }) => {
+  console.log('Message processed', message.id);
+});
+
+service.on('conversation:created', (conversation) => {
+  console.log('New conversation', conversation.conversationId);
+});
+
+service.on('conversation:initiated', ({ phoneNumber, conversationId }) => {
+  console.log('Conversation initiated with', phoneNumber);
+});
+
+service.on('error', (error) => {
+  console.error('Service error:', error);
+});
 ```
 
-### Custom Storage Backend
+## 🚦 Service Control
 
-```python
-class MongoDBStorage(IStorageBackend):
-    async def get(self, key):
-        # MongoDB implementation
-        pass
-    
-    async def set(self, key, value, ttl=None):
-        # MongoDB implementation
-        pass
+```typescript
+// Start service
+await service.start();
+
+// Stop service
+await service.stop();
+
+// Get status
+const status = service.getStatus();
+// { running: true, agents: ['support', 'sales'], activeConversations: 5 }
 ```
 
-## 🧪 Testing
+## 🔒 Security Considerations
 
-Run the example usage:
-
-```bash
-python example_usage.py
-```
-
-Run tests (when implemented):
-
-```bash
-pytest tests/
-```
-
-## 📈 Performance Considerations
-
-- **Async/await throughout** for non-blocking operations
-- **Message queuing** for handling high loads
-- **Connection pooling** for database operations
-- **TTL support** for automatic cleanup
-- **Batch processing** capabilities
-
-## 🔒 Security Features
-
-- Message content filtering
-- Rate limiting support
-- Conversation isolation
-- Secure storage options
-- API key management
-
-## 🛣️ Roadmap
-
-- [ ] WebSocket support for real-time messaging
-- [ ] REST API endpoints
-- [ ] Dashboard for monitoring
-- [ ] Machine learning-based routing
-- [ ] Multi-language support
-- [ ] Voice message processing
-- [ ] Distributed deployment support
+- Store API keys in environment variables
+- Implement rate limiting for incoming messages
+- Validate phone numbers before processing
+- Use Redis with password in production
+- Implement message encryption for sensitive data
 
 ## 📝 License
 
-MIT License - See LICENSE file for details
+MIT
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit pull requests.
-
-## 📧 Support
-
-For questions and support, please open an issue in the repository.
+This service is designed to be extended. Feel free to:
+- Add new AI engines
+- Create custom agents
+- Implement new routing strategies
+- Add storage backends
