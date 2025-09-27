@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Personal WhatsApp API with Scheduling
-  description: A personal WhatsApp API server with scheduled messaging capabilities for birthday reminders, regular check-ins, and automated notifications.
+  description: A personal WhatsApp API server with scheduled messaging capabilities for birthday reminders, regular check-ins, automated notifications, and pub/sub messaging for broadcasting to multiple subscribers.
   version: 1.0.0
   contact:
     name: Personal WhatsApp API
@@ -639,6 +639,446 @@ paths:
                     type: string
                     example: "Use https://crontab.guru to validate your cron expressions"
 
+  /pubsub/topics:
+    get:
+      summary: Get all pub/sub topics
+      description: Returns a list of all available pub/sub topics with their metadata
+      operationId: getPubSubTopics
+      tags:
+        - Pub/Sub
+      responses:
+        '200':
+          description: List of topics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  topics:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PubSubTopic'
+
+    post:
+      summary: Create a new pub/sub topic
+      description: Creates a new topic for publishing messages to multiple subscribers
+      operationId: createPubSubTopic
+      tags:
+        - Pub/Sub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Unique name for the topic
+                  example: "daily-updates"
+                description:
+                  type: string
+                  description: Optional description of the topic
+                  example: "Daily status updates for the team"
+      responses:
+        '201':
+          description: Topic created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Topic created"
+                  topic:
+                    $ref: '#/components/schemas/PubSubTopic'
+        '400':
+          description: Invalid request or topic name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pubsub/topics/{id}:
+    get:
+      summary: Get a specific pub/sub topic
+      description: Returns details of a specific topic including its subscribers
+      operationId: getPubSubTopic
+      tags:
+        - Pub/Sub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Topic ID
+      responses:
+        '200':
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  topic:
+                    $ref: '#/components/schemas/PubSubTopic'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete a pub/sub topic
+      description: Permanently deletes a topic and all its subscriptions
+      operationId: deletePubSubTopic
+      tags:
+        - Pub/Sub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Topic ID
+      responses:
+        '200':
+          description: Topic deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Topic deleted"
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pubsub/topics/{id}/subscribers:
+    get:
+      summary: Get subscribers for a topic
+      description: Returns all subscribers for a specific topic
+      operationId: getTopicSubscribers
+      tags:
+        - Pub/Sub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Topic ID
+      responses:
+        '200':
+          description: List of subscribers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  subscribers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TopicSubscriber'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Subscribe to a topic
+      description: Adds a phone number as a subscriber to a topic
+      operationId: subscribeToTopic
+      tags:
+        - Pub/Sub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Topic ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+              properties:
+                number:
+                  type: string
+                  description: Phone number to subscribe (digits only)
+                  example: "1234567890"
+      responses:
+        '200':
+          description: Subscription successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Subscribed to topic"
+                  topic:
+                    $ref: '#/components/schemas/PubSubTopic'
+        '400':
+          description: Invalid phone number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Unsubscribe from a topic
+      description: Removes a phone number from a topic's subscribers
+      operationId: unsubscribeFromTopic
+      tags:
+        - Pub/Sub
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Topic ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - number
+              properties:
+                number:
+                  type: string
+                  description: Phone number to unsubscribe (digits only)
+                  example: "1234567890"
+      responses:
+        '200':
+          description: Unsubscription processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Unsubscribed from topic"
+                  topic:
+                    $ref: '#/components/schemas/PubSubTopic'
+        '400':
+          description: Invalid phone number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pubsub/subscriptions/{number}:
+    get:
+      summary: Get subscription status for a phone number
+      description: Returns all topics that a specific phone number is subscribed to
+      operationId: getSubscriptionStatus
+      tags:
+        - Pub/Sub
+      parameters:
+        - name: number
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Phone number (digits only)
+          example: "1234567890"
+      responses:
+        '200':
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  subscription:
+                    $ref: '#/components/schemas/SubscriptionStatus'
+        '400':
+          description: Invalid phone number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pubsub/publish:
+    post:
+      summary: Publish message to topic
+      description: Broadcasts a message to all subscribers of a specific topic
+      operationId: publishToTopic
+      tags:
+        - Pub/Sub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - topicId
+                - message
+              properties:
+                topicId:
+                  type: string
+                  description: ID of the topic to publish to
+                  example: "123e4567-e89b-12d3-a456-426614174000"
+                message:
+                  type: string
+                  description: Message content to broadcast
+                  example: "Hello everyone! This is a broadcast message."
+      responses:
+        '200':
+          description: Message broadcast completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Message broadcast completed"
+                  summary:
+                    $ref: '#/components/schemas/PublishSummary'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: WhatsApp not connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pubsub/settings:
+    get:
+      summary: Get pub/sub settings
+      description: Returns current pub/sub configuration settings
+      operationId: getPubSubSettings
+      tags:
+        - Pub/Sub
+      responses:
+        '200':
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  settings:
+                    $ref: '#/components/schemas/PubSubSettings'
+
+    put:
+      summary: Update pub/sub settings
+      description: Updates pub/sub configuration settings
+      operationId: updatePubSubSettings
+      tags:
+        - Pub/Sub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                messageDelaySeconds:
+                  type: number
+                  minimum: 0
+                  description: Delay in seconds between messages when broadcasting
+                  example: 2
+      responses:
+        '200':
+          description: Settings updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Settings updated"
+                  settings:
+                    $ref: '#/components/schemas/PubSubSettings'
+        '400':
+          description: Invalid settings parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -715,6 +1155,120 @@ components:
           description: Error message
           example: "Invalid request parameters"
 
+    PubSubTopic:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique topic identifier (UUID)
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          description: Topic name (unique)
+          example: "daily-updates"
+        description:
+          type: string
+          description: Optional topic description
+          example: "Daily status updates for the team"
+        subscribers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicSubscriber'
+          description: List of subscribers to this topic
+        created:
+          type: string
+          format: date-time
+          description: Topic creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updated:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T11:30:00Z"
+
+    TopicSubscriber:
+      type: object
+      properties:
+        number:
+          type: string
+          description: Phone number (normalized, digits only)
+          example: "1234567890"
+        subscribedAt:
+          type: string
+          format: date-time
+          description: Subscription timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    SubscriptionStatus:
+      type: object
+      properties:
+        number:
+          type: string
+          description: Original phone number provided
+          example: "+1-234-567-8900"
+        normalized:
+          type: string
+          description: Normalized phone number (digits only)
+          example: "1234567890"
+        topics:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Topic ID
+                example: "123e4567-e89b-12d3-a456-426614174000"
+              name:
+                type: string
+                description: Topic name
+                example: "daily-updates"
+          description: List of topics the number is subscribed to
+
+    PublishResult:
+      type: object
+      properties:
+        number:
+          type: string
+          description: Phone number the message was sent to
+          example: "1234567890"
+        success:
+          type: boolean
+          description: Whether the message was sent successfully
+          example: true
+        error:
+          type: string
+          description: Error message if sending failed
+          example: "Failed to deliver message"
+
+    PublishSummary:
+      type: object
+      properties:
+        topic:
+          $ref: '#/components/schemas/PubSubTopic'
+        attempted:
+          type: integer
+          description: Total number of subscribers the message was attempted to be sent to
+          example: 5
+        delivered:
+          type: integer
+          description: Number of successful message deliveries
+          example: 4
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublishResult'
+          description: Detailed results for each subscriber
+
+    PubSubSettings:
+      type: object
+      properties:
+        messageDelaySeconds:
+          type: number
+          minimum: 0
+          description: Delay in seconds between messages when broadcasting to avoid rate limits
+          example: 1
+
 tags:
   - name: System
     description: System status and health endpoints
@@ -726,5 +1280,7 @@ tags:
     description: Immediate message sending
   - name: Scheduled Messages
     description: Scheduled message management
+  - name: Pub/Sub
+    description: Publish/Subscribe messaging system for broadcasting to multiple subscribers
   - name: Utilities
     description: Helper endpoints and examples
