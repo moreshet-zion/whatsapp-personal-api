@@ -1,238 +1,401 @@
-# WhatsApp Personal API with Scheduling
+# Message Interception and Routing System
 
-A comprehensive WhatsApp API server with advanced scheduling, pub/sub messaging, and group support. Perfect for personal automation, team communication, birthday reminders, and broadcast messaging.
+A highly modular and scalable system for intercepting, routing, and processing messages with AI agent integration. Designed with flexibility in mind, supporting multiple storage backends, AI engines, and custom routing logic.
 
-## ✨ Features
+## 🏗️ Architecture Overview
 
-- 📱 **Instant Messaging**: Send immediate messages to individuals and groups
-- ⏰ **Smart Scheduling**: Cron-based recurring and date-based one-time messages  
-- 📣 **Pub/Sub System**: Broadcast messages to multiple subscribers with topics
-- 👥 **Group Support**: Full WhatsApp group messaging capabilities
-- 🔄 **Task Management**: Activate/deactivate schedules without losing them
-- 📊 **Bulk Operations**: Manage multiple schedules efficiently
-- 🔐 **Secure Authentication**: API key and bearer token support
-- 💾 **Persistent Storage**: Reliable data persistence for sessions and schedules
-- 🌐 **Production Ready**: Docker, Fly.io deployment configurations included
-- 📚 **Complete Documentation**: Comprehensive guides and API reference
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Message Interception Layer               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Message Interceptor                       │   │
+│  │  - Pre-processing                                   │   │
+│  │  - Queue management                                 │   │
+│  │  - Post-processing                                  │   │
+│  └──────────────────┬──────────────────────────────────┘   │
+└─────────────────────┼───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Routing Layer                          │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Message Router                           │   │
+│  │  - Custom routing rules                            │   │
+│  │  - Pattern matching                                │   │
+│  │  - Keyword detection                               │   │
+│  │  - Conversation detection                          │   │
+│  └──────────────────┬──────────────────────────────────┘   │
+└─────────────────────┼───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Conversation Management                    │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │         Conversation Manager                        │   │
+│  │  - Conversation lifecycle                          │   │
+│  │  - History tracking                                │   │
+│  │  - State management                                │   │
+│  │  - Analytics                                       │   │
+│  └──────────────────┬──────────────────────────────────┘   │
+└─────────────────────┼───────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Agent Layer                           │
+│  ┌──────────────┬──────────────┬──────────────────────┐   │
+│  │ Support Agent│ Sales Agent  │ Custom Agents        │   │
+│  │              │              │                      │   │
+│  │  Personas    │  Personas    │  Personas           │   │
+│  └──────┬───────┴──────┬───────┴──────┬───────────────┘   │
+│         │              │              │                    │
+│  ┌──────▼──────────────▼──────────────▼───────────────┐   │
+│  │            AI Engine Abstraction                    │   │
+│  │  ┌────────┬────────┬────────┬──────────────────┐  │   │
+│  │  │OpenAI  │Claude  │Gemini  │Local/Custom      │  │   │
+│  │  └────────┴────────┴────────┴──────────────────┘  │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Storage Layer                            │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │           Storage Abstraction                       │   │
+│  │  ┌──────────────┐     ┌──────────────────────┐    │   │
+│  │  │ Local Files  │ ←→  │      Redis           │    │   │
+│  │  └──────────────┘     └──────────────────────┘    │   │
+│  │         Seamless Migration Path                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## ✨ Key Features
+
+### 1. **Message Interception**
+- Centralized entry point for all incoming messages
+- Pre and post-processing pipelines
+- Asynchronous message queue processing
+- Message status tracking
+
+### 2. **Intelligent Routing**
+- **Custom routing rules** with priority-based execution
+- **Keyword-based routing** for topic detection
+- **Pattern matching** with regex support
+- **Conversation continuity** detection
+- **Pluggable routing logic** for custom implementations
+
+### 3. **Conversation Management**
+- Full conversation lifecycle management
+- Message history tracking
+- Conversation state persistence
+- Analytics and insights
+- Automatic timeout handling
+
+### 4. **AI Agent Abstraction**
+- **Multiple agent personas** with unique personalities
+- **Multi-engine support** (OpenAI, Claude, Gemini, etc.)
+- **Engine hot-swapping** capability
+- **Specialized agents** for different tasks
+- **Tool integration** for enhanced capabilities
+
+### 5. **Scalable Storage**
+- **Local file storage** for development
+- **Redis support** for production
+- **Hybrid storage** with migration capabilities
+- **Redis-compatible API** for seamless scaling
+- TTL support for automatic cleanup
 
 ## 🚀 Quick Start
 
-Prereqs: Node.js 18+ (or 20+ recommended)
+### Installation
 
-1) Install deps
 ```bash
-npm install
+# Clone the repository
+git clone <repository-url>
+cd message_system
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create necessary directories
+mkdir -p data/storage logs
 ```
 
-2) Configure environment
-```bash
-echo 'API_TOKENS=dev_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > .env
-echo 'PORT=3000' >> .env
+### Basic Usage
+
+```python
+import asyncio
+from message_system.core.message import Message
+from message_system.interceptor.message_interceptor import MessageInterceptor
+from message_system.routing.router import CustomizableRouter
+from message_system.conversation.manager import ConversationManager
+from message_system.agents.base_agent import PersonaAgent
+from message_system.agents.engines import EngineFactory
+from message_system.storage.backends import LocalFileStorage
+
+async def main():
+    # Initialize storage
+    storage = LocalFileStorage("./data/storage")
+    
+    # Setup router
+    router = CustomizableRouter(storage)
+    
+    # Setup conversation manager
+    conversation_manager = ConversationManager(storage)
+    
+    # Create an AI agent
+    engine = EngineFactory.create_engine("local")
+    agent = PersonaAgent(
+        "assistant",
+        persona={
+            "name": "Assistant",
+            "role": "AI Helper",
+            "personality": "Helpful and friendly"
+        },
+        engine=engine
+    )
+    
+    # Setup interceptor
+    interceptor = MessageInterceptor(
+        router=router,
+        conversation_manager=conversation_manager,
+        default_agent=agent
+    )
+    
+    # Process a message
+    message = Message(
+        sender_id="user123",
+        recipient_id="bot",
+        content="Hello, I need help!"
+    )
+    
+    response = await interceptor.intercept(message)
+    print(f"Response: {response.content}")
+
+asyncio.run(main())
 ```
 
-3) Start the server (dev)
-```bash
-npm run dev
+## 🔧 Configuration
+
+### YAML Configuration
+
+The system supports comprehensive YAML configuration:
+
+```yaml
+# config/system_config.yaml
+storage:
+  type: "local"
+  local:
+    base_path: "./data/storage"
+
+router:
+  conversation_timeout: 1800
+  keyword_routes:
+    - keywords: ["support", "help"]
+      agent: "support_agent"
+      priority: 80
+
+agents:
+  support_agent:
+    persona:
+      name: "Alex"
+      role: "Support Specialist"
+    engine: "openai"
 ```
 
-4) Link WhatsApp
-- Open http://localhost:3000/qr-image (recommended) or GET `/qr`
-- Scan the QR using WhatsApp → Linked devices → Link a device
+### Custom Routing Rules
 
-5) Test the API (replace the key)
-```bash
-curl -H "x-api-key: dev_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" http://localhost:3000/health
+```python
+# Add custom routing logic
+async def custom_router(message: Message):
+    if "urgent" in message.content.lower():
+        return RoutingDecision(
+            should_process=True,
+            create_new_conversation=True,
+            metadata={"priority": "high"}
+        )
+    return None
+
+await router.register_rule("urgency_check", custom_router)
 ```
 
-Notes
-- After first link, Baileys reuses credentials in `sessions/` and reconnects automatically on restart.
-- Persist `sessions/` and `data/` in production to avoid re‑auth and to keep schedules.
+### Multiple AI Engines
 
-## 🔐 API Authentication
+```python
+# Configure multiple engines
+openai_engine = EngineFactory.create_engine("openai", {
+    "api_key": "your-key",
+    "model": "gpt-4"
+})
 
-All endpoints require an API key:
-- Header: `x-api-key: <key>`
-- Alternatively: `Authorization: Bearer <key>`
+claude_engine = EngineFactory.create_engine("claude", {
+    "api_key": "your-key",
+    "model": "claude-3"
+})
 
-Configure comma‑separated keys via `API_TOKENS`.
-
-## 📋 API Overview
-
-### System & Health
-- `GET /health` — Connection status and system information
-- `GET /qr`, `GET /qr-image` — WhatsApp QR code for authentication  
-- `POST /restart` — Restart WhatsApp session
-- `GET /groups` — List WhatsApp groups
-
-### Messaging
-- `POST /send` — Send immediate messages to individuals or groups
-
-### Scheduled Messages  
-- `GET /scheduled` — List with filtering options
-- `POST /scheduled` — Create cron-based recurring schedules
-- `POST /scheduleDate` — Create date-based one-time schedules
-- `PUT /scheduled/{id}` — Update schedules
-- `DELETE /scheduled/{id}` — Delete schedules  
-- `POST /scheduled/{id}/toggle` — Activate/deactivate schedules
-- `POST /scheduled/bulk` — Bulk operations (activate/deactivate/delete)
-
-### Pub/Sub Broadcasting
-- `GET /pubsub/topics` — List all topics
-- `POST /pubsub/topics` — Create topics
-- `GET /pubsub/topics/{id}` — Get topic details
-- `DELETE /pubsub/topics/{id}` — Delete topics
-- `POST /pubsub/topics/{id}/subscribers` — Subscribe phone numbers
-- `DELETE /pubsub/topics/{id}/subscribers` — Unsubscribe phone numbers  
-- `GET /pubsub/subscriptions/{number}` — Check subscription status
-- `POST /pubsub/publish` — Broadcast messages to topic subscribers
-- `GET /pubsub/settings` — View/update broadcast settings
-
-### Utilities
-- `GET /schedule-examples` — Cron expression examples and help
-
-📖 **Complete API Documentation**: See [API Reference](docs/API_REFERENCE.md) for detailed schemas and examples.
-
-## 💡 Usage Examples
-
-Send immediate message
-```bash
-curl -X POST http://localhost:3000/send \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <API_KEY>" \
-  -d '{
-    "number": "1234567890",
-    "message": "Hello from my API!"
-  }'
+# Create multi-engine agent
+agent = MultiEngineAgent("assistant", persona)
+agent.add_engine("openai", openai_engine)
+agent.add_engine("claude", claude_engine)
 ```
 
-Create weekly schedule
-```bash
-curl -X POST http://localhost:3000/scheduled \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <API_KEY>" \
-  -d '{
-    "number": "1234567890",
-    "message": "Weekly Monday check-in",
-    "schedule": "0 10 * * 1",
-    "description": "Monday 10am"
-  }'
+## 📊 Storage Migration
+
+The system provides a seamless migration path from local files to Redis:
+
+```python
+# Start with local storage
+local_storage = LocalFileStorage("./data")
+
+# When ready to scale, add Redis
+redis_storage = RedisStorage("localhost", 6379)
+
+# Use hybrid storage for migration
+hybrid = HybridStorage(
+    primary=local_storage,
+    secondary=redis_storage
+)
+
+# Enable sync
+await hybrid.enable_sync()
+
+# Migrate data
+await hybrid.migrate_to_secondary()
 ```
 
-Create a topic and broadcast
-```bash
-# Create a topic
-curl -X POST http://localhost:3000/pubsub/topics \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <API_KEY>" \
-  -d '{ "name": "Daily Updates" }'
+## 🎯 Use Cases
 
-# Subscribe numbers
-curl -X POST http://localhost:3000/pubsub/topics/<TOPIC_ID>/subscribers \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <API_KEY>" \
-  -d '{ "number": "+1234567890" }'
+1. **Customer Support Bot**
+   - Route support queries to specialized agents
+   - Maintain conversation context
+   - Escalate complex issues
 
-# Broadcast with the configured delay between each recipient
-curl -X POST http://localhost:3000/pubsub/publish \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <API_KEY>" \
-  -d '{ "topicId": "<TOPIC_ID>", "message": "Good morning!" }'
+2. **Sales Assistant**
+   - Handle product inquiries
+   - Process purchase requests
+   - Provide personalized recommendations
+
+3. **Multi-Channel Communication**
+   - Process messages from various channels
+   - Maintain unified conversation history
+   - Consistent responses across platforms
+
+4. **Enterprise Chatbot Platform**
+   - Deploy multiple specialized agents
+   - Custom routing based on business rules
+   - Scalable infrastructure with Redis
+
+## 📁 Project Structure
+
+```
+message_system/
+├── core/
+│   ├── __init__.py
+│   ├── message.py          # Message data structures
+│   └── interfaces.py       # Core interfaces
+├── interceptor/
+│   └── message_interceptor.py  # Message interception logic
+├── routing/
+│   └── router.py           # Routing implementations
+├── conversation/
+│   └── manager.py          # Conversation management
+├── agents/
+│   ├── base_agent.py       # Agent implementations
+│   └── engines.py          # AI engine integrations
+├── storage/
+│   └── backends.py         # Storage implementations
+└── config/
+    └── system_config.yaml  # System configuration
 ```
 
-One‑time Sunday 04:27
-```bash
-curl -X POST http://localhost:3000/scheduled \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: <API_KEY>" \
-  -d '{
-    "number": "1234567890",
-    "message": "One-time reminder",
-    "schedule": "27 4 * * 0",
-    "oneTime": true
-  }'
+## 🔌 Extending the System
+
+### Adding a New AI Engine
+
+```python
+class CustomEngine(BaseEngine):
+    async def generate_response(self, message, history, context):
+        # Your implementation
+        return response_message
 ```
 
-Toggle a schedule
-```bash
-curl -X POST http://localhost:3000/scheduled/<ID>/toggle \
-  -H "x-api-key: <API_KEY>"
+### Creating Specialized Agents
+
+```python
+class TranslationAgent(SpecializedAgent):
+    def __init__(self):
+        super().__init__(
+            agent_id="translator",
+            persona={"name": "Translator"},
+            specialization="translation"
+        )
+    
+    async def process_message(self, message, context):
+        # Translation logic
+        return translated_response
 ```
 
-📖 **More Examples**: See [Test Calls Guide](docs/TEST_CALLS.md) for comprehensive curl examples.
+### Custom Storage Backend
 
-## ⏰ Cron Tips
-
-- Format: `minute hour day month dayOfWeek`
-- Validate at https://crontab.guru
-- Common:
-  - Daily 9am → `0 9 * * *`
-  - Mondays 10am → `0 10 * * 1`
-  - Fridays 5pm → `0 17 * * 5`
-
-## 🧱 Data Storage
-
-- WhatsApp credentials: `sessions/`
-- Scheduled messages: `data/scheduled.json`
-- Pub/Sub topics + subscribers: `data/pubsub.json`
-
-## 🌐 Deployment
-
-Fly.io (included `fly.toml`)
-```bash
-fly volumes create whatsapp_storage -r <region> -s 1
-fly secrets set API_TOKENS=<your_keys>
-fly deploy
-```
-Notes: One volume is used at `/data` via `STORAGE_DIR`. It contains `sessions/` and `data/` folders.
-
-Docker
-```bash
-# Build
-docker build -t whatsapp-personal-api .
-# Run (map volumes to persist sessions/data)
-docker run -p 3000:8080 \
-  -e API_TOKENS=<your_keys> \
-  -e STORAGE_DIR=/data \
-  -v $(pwd)/storage:/data \
-  whatsapp-personal-api
+```python
+class MongoDBStorage(IStorageBackend):
+    async def get(self, key):
+        # MongoDB implementation
+        pass
+    
+    async def set(self, key, value, ttl=None):
+        # MongoDB implementation
+        pass
 ```
 
-## 🛡️ Notes & Best Practices
+## 🧪 Testing
 
-- Personal use only; do not spam. Respect WhatsApp terms.
-- Keep your API key secret. Rotate if leaked.
-- Persist `sessions/` to avoid scanning again after restarts.
-- Monitor `/health` and logs for connection state.
-- Baileys does not expose throttling controls, so the pub/sub sender enforces your configured delay between each recipient to avoid spamming WhatsApp.
+Run the example usage:
 
-## 📚 Documentation
+```bash
+python example_usage.py
+```
 
-### Quick Start
-- 🚀 **[Getting Started](docs/GETTING_STARTED.md)** - Setup and first steps
-- 📋 **[API Reference](docs/API_REFERENCE.md)** - Complete endpoint documentation
-- 🧪 **[Test Calls](docs/TEST_CALLS.md)** - curl examples and testing
+Run tests (when implemented):
 
-### Feature Guides  
-- ⏰ **[Scheduling Guide](docs/SCHEDULING_GUIDE.md)** - Master cron and date-based scheduling
-- 📣 **[Pub/Sub Guide](docs/PUBSUB_GUIDE.md)** - Broadcasting and topic management
-- 👥 **[Group Messaging](docs/GROUP_MESSAGING.md)** - Send to WhatsApp groups
-- 🚀 **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment options
-- 🔧 **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+```bash
+pytest tests/
+```
 
-### Reference
-- 📄 **[OpenAPI Spec](api-spec.openai)** - Import into Postman/Insomnia
-- 🔧 **[Task Management Features](TASK_MANAGEMENT_FEATURES.md)** - Schedule management
+## 📈 Performance Considerations
 
-## 🛡️ Best Practices
+- **Async/await throughout** for non-blocking operations
+- **Message queuing** for handling high loads
+- **Connection pooling** for database operations
+- **TTL support** for automatic cleanup
+- **Batch processing** capabilities
 
-- **Personal Use Only**: Respect WhatsApp Terms of Service
-- **API Security**: Keep API keys secret, rotate regularly  
-- **Data Backup**: Persist `sessions/` and `data/` directories
-- **Rate Limiting**: Use pub/sub delays to avoid WhatsApp limits
-- **Health Monitoring**: Monitor `/health` endpoint in production
+## 🔒 Security Features
 
-## 📚 References
+- Message content filtering
+- Rate limiting support
+- Conversation isolation
+- Secure storage options
+- API key management
 
-- **Baileys Library**: https://baileys.wiki/docs/intro/
-- **Cron Expressions**: https://crontab.guru
-- **WhatsApp Business API**: https://developers.facebook.com/docs/whatsapp
+## 🛣️ Roadmap
+
+- [ ] WebSocket support for real-time messaging
+- [ ] REST API endpoints
+- [ ] Dashboard for monitoring
+- [ ] Machine learning-based routing
+- [ ] Multi-language support
+- [ ] Voice message processing
+- [ ] Distributed deployment support
+
+## 📝 License
+
+MIT License - See LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit pull requests.
+
+## 📧 Support
+
+For questions and support, please open an issue in the repository.

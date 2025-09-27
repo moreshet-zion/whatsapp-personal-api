@@ -1,0 +1,213 @@
+# Message Interception System Configuration
+
+# Storage Configuration
+storage:
+  type: "local"  # Options: local, redis, hybrid
+  local:
+    base_path: "./data/storage"
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+  hybrid:
+    sync_enabled: false
+    migration_on_startup: false
+
+# Router Configuration
+router:
+  conversation_timeout: 1800  # 30 minutes in seconds
+  default_action: "ignore"    # Options: ignore, create_new, route_to_default
+  
+  # Keyword-based routing rules
+  keyword_routes:
+    - keywords: ["support", "help", "problem", "issue"]
+      action: "create_new"
+      agent: "support_agent"
+      priority: 80
+    
+    - keywords: ["buy", "purchase", "price", "cost"]
+      action: "create_new"
+      agent: "sales_agent"
+      priority: 75
+    
+    - keywords: ["feedback", "suggestion", "improve"]
+      action: "create_new"
+      agent: "feedback_agent"
+      priority: 70
+  
+  # Pattern-based routing rules
+  pattern_routes:
+    - pattern: "order\\s*#\\d+"
+      action: "continue"
+      priority: 90
+    
+    - pattern: "ticket\\s*#\\d+"
+      action: "continue"
+      priority: 85
+    
+    - pattern: "^(hi|hello|hey)\\b"
+      action: "create_new"
+      priority: 50
+  
+  # Ignore rules
+  ignore_patterns:
+    - "^\\s*$"  # Empty messages
+    - "^(test|testing)$"  # Test messages
+    - "\\b(spam|advertisement)\\b"  # Spam keywords
+
+# Conversation Manager Configuration
+conversation:
+  max_history_size: 100
+  auto_close_after: 3600  # 1 hour in seconds
+  analytics_enabled: true
+
+# Agent Configuration
+agents:
+  # Support Agent
+  support_agent:
+    persona:
+      name: "Alex"
+      role: "Technical Support Specialist"
+      personality: "Patient, helpful, and technically knowledgeable"
+      instructions: |
+        - Help users resolve technical issues
+        - Ask clarifying questions when needed
+        - Provide step-by-step solutions
+        - Escalate complex issues appropriately
+      knowledge_base:
+        - "Common troubleshooting steps"
+        - "Product documentation"
+        - "Known issues and workarounds"
+      constraints:
+        - "Always be polite and professional"
+        - "Don't make promises about features or timelines"
+        - "Protect user privacy"
+      max_history_size: 20
+    engine: "local"  # Options: local, openai, claude, gemini
+    specialization: "technical_support"
+  
+  # Sales Agent
+  sales_agent:
+    persona:
+      name: "Sarah"
+      role: "Sales Representative"
+      personality: "Friendly, enthusiastic, and knowledgeable about products"
+      instructions: |
+        - Help customers find the right products
+        - Provide accurate pricing information
+        - Suggest relevant alternatives
+        - Handle purchase inquiries
+      knowledge_base:
+        - "Product catalog"
+        - "Pricing tiers"
+        - "Current promotions"
+      constraints:
+        - "Be helpful but not pushy"
+        - "Provide accurate information only"
+        - "Don't offer unauthorized discounts"
+      max_history_size: 15
+    engine: "local"
+    specialization: "sales"
+  
+  # General Assistant
+  general_agent:
+    persona:
+      name: "Assistant"
+      role: "General AI Assistant"
+      personality: "Adaptive, helpful, and versatile"
+      instructions: |
+        - Handle general inquiries
+        - Route to specialized agents when needed
+        - Provide basic information
+      constraints:
+        - "Stay within knowledge boundaries"
+        - "Be helpful and concise"
+      max_history_size: 25
+    engine: "local"
+
+# Engine Configuration
+engines:
+  local:
+    type: "local"
+    responses:
+      hello: "Hello! How can I assist you today?"
+      help: "I'm here to help. What do you need assistance with?"
+      bye: "Thank you for chatting. Have a great day!"
+      default: "I understand. Let me help you with that."
+  
+  openai:
+    type: "openai"
+    api_key: "${OPENAI_API_KEY}"  # Use environment variable
+    model: "gpt-4"
+    temperature: 0.7
+    max_tokens: 500
+  
+  claude:
+    type: "claude"
+    api_key: "${ANTHROPIC_API_KEY}"  # Use environment variable
+    model: "claude-3-opus"
+    max_tokens: 500
+  
+  gemini:
+    type: "gemini"
+    api_key: "${GOOGLE_API_KEY}"  # Use environment variable
+    model: "gemini-pro"
+    temperature: 0.7
+
+# System Configuration
+system:
+  # Message Processing
+  processing:
+    queue_size: 1000
+    batch_size: 10
+    timeout: 30  # seconds
+  
+  # Logging
+  logging:
+    level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+    file: "./logs/system.log"
+    max_size: "10MB"
+    backup_count: 5
+  
+  # Monitoring
+  monitoring:
+    enabled: true
+    metrics_port: 9090
+    health_check_interval: 60  # seconds
+  
+  # Security
+  security:
+    rate_limiting:
+      enabled: true
+      max_requests_per_minute: 60
+      max_requests_per_hour: 1000
+    
+    content_filtering:
+      enabled: true
+      block_patterns:
+        - "\\b(password|secret|token)\\b"
+        - "\\b\\d{3}-\\d{2}-\\d{4}\\b"  # SSN pattern
+    
+    encryption:
+      enabled: false  # Enable for production
+      key_path: "./keys/encryption.key"
+
+# Feature Flags
+features:
+  auto_translation: false
+  sentiment_analysis: false
+  context_enrichment: true
+  conversation_summary: true
+  multi_language_support: false
+  
+# Webhooks
+webhooks:
+  enabled: false
+  endpoints:
+    - url: "https://example.com/webhook/message"
+      events: ["message.received", "message.processed"]
+      headers:
+        Authorization: "Bearer ${WEBHOOK_TOKEN}"
+    
+    - url: "https://analytics.example.com/events"
+      events: ["conversation.started", "conversation.ended"]
