@@ -43,6 +43,8 @@ xdg-open "$BASE_URL/qr-image" || true
 
 ## Send Message (immediate)
 
+### Send to Individual Number
+
 ```bash
 curl -s -X POST "$BASE_URL/send" \
   -H 'Content-Type: application/json' \
@@ -53,9 +55,36 @@ curl -s -X POST "$BASE_URL/send" \
   }' | jq
 ```
 
+### Send to WhatsApp Group
+
+```bash
+# First, get your groups to find the JID
+curl -s "$BASE_URL/groups" -H "x-api-key: $API_KEY" | jq
+
+# Then send to a group using the JID
+curl -s -X POST "$BASE_URL/send" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "jid": "120363147258369076@g.us",
+    "message": "Hello group! This is a message from the API 👋"
+  }' | jq
+```
+
 Notes:
 - `number` should be digits only, as per spec example (no `+`).
-- Ensure your WhatsApp is linked and the number is valid on WhatsApp.
+- Use `jid` for WhatsApp groups (format: `{groupId}@g.us`)
+- Ensure your WhatsApp is linked and the number/group is valid on WhatsApp.
+
+## 👥 WhatsApp Groups
+
+### List Your Groups
+
+```bash
+curl -s "$BASE_URL/groups" -H "x-api-key: $API_KEY" | jq
+```
+
+This returns all WhatsApp groups you're part of with their JIDs, names, and participant counts.
 
 ## Scheduled Messages — List
 
@@ -221,6 +250,113 @@ curl -s -X POST "$BASE_URL/restart" -H "x-api-key: $API_KEY" | jq
 
 ```bash
 curl -s "$BASE_URL/schedule-examples" -H "x-api-key: $API_KEY" | jq
+```
+
+## 📣 Pub/Sub System ✨ NEW
+
+The pub/sub system allows broadcasting messages to multiple subscribers organized by topics.
+
+### Create Topic
+
+```bash
+curl -s -X POST "$BASE_URL/pubsub/topics" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "name": "daily-updates",
+    "description": "Daily team updates"
+  }' | jq
+
+# Save the returned topic ID for next steps
+export TOPIC_ID="<paste-topic-id-here>"
+```
+
+### List All Topics
+
+```bash
+curl -s "$BASE_URL/pubsub/topics" -H "x-api-key: $API_KEY" | jq
+```
+
+### Subscribe Phone Numbers
+
+```bash
+# Add first subscriber
+curl -s -X POST "$BASE_URL/pubsub/topics/$TOPIC_ID/subscribers" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "number": "1234567890"
+  }' | jq
+
+# Add second subscriber  
+curl -s -X POST "$BASE_URL/pubsub/topics/$TOPIC_ID/subscribers" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "number": "0987654321"
+  }' | jq
+```
+
+### View Topic Subscribers
+
+```bash
+curl -s "$BASE_URL/pubsub/topics/$TOPIC_ID/subscribers" \
+  -H "x-api-key: $API_KEY" | jq
+```
+
+### Broadcast Message
+
+```bash
+# Broadcast to all subscribers of the topic
+curl -s -X POST "$BASE_URL/pubsub/publish" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "topicId": "'$TOPIC_ID'",
+    "message": "🚀 Daily Update: All systems operational! Team productivity is at an all-time high. Keep up the great work! 👍"
+  }' | jq
+```
+
+### Check Subscription Status
+
+```bash
+# See which topics a phone number is subscribed to
+curl -s "$BASE_URL/pubsub/subscriptions/1234567890" \
+  -H "x-api-key: $API_KEY" | jq
+```
+
+### Unsubscribe from Topic
+
+```bash
+curl -s -X DELETE "$BASE_URL/pubsub/topics/$TOPIC_ID/subscribers" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "number": "1234567890"
+  }' | jq
+```
+
+### Pub/Sub Settings
+
+```bash
+# View current settings
+curl -s "$BASE_URL/pubsub/settings" -H "x-api-key: $API_KEY" | jq
+
+# Update message delay (to avoid rate limiting)
+curl -s -X PUT "$BASE_URL/pubsub/settings" \
+  -H 'Content-Type: application/json' \
+  -H "x-api-key: $API_KEY" \
+  -d '{
+    "messageDelaySeconds": 2
+  }' | jq
+```
+
+### Delete Topic
+
+```bash
+# ⚠️ WARNING: This permanently deletes the topic and all subscribers
+curl -s -X DELETE "$BASE_URL/pubsub/topics/$TOPIC_ID" \
+  -H "x-api-key: $API_KEY" | jq
 ```
 
 ---
