@@ -60,6 +60,7 @@ Configure comma‑separated keys via `API_TOKENS`.
 
 ### System & Health
 - `GET /health` — Connection status and system information
+- `GET /health/redis` — Redis connectivity and performance check
 - `GET /qr`, `GET /qr-image` — WhatsApp QR code for authentication  
 - `POST /restart` — Restart WhatsApp session
 - `GET /groups` — List WhatsApp groups
@@ -159,6 +160,15 @@ curl -X POST http://localhost:3000/scheduled/<ID>/toggle \
 ```
 
 📖 **More Examples**: See [Test Calls Guide](docs/TEST_CALLS.md) for comprehensive curl examples.
+
+## Redis Health
+
+Check Redis connectivity and performance:
+```bash
+curl -sS http://localhost:8080/health/redis | jq
+```
+
+This endpoint validates Redis by connecting, pinging, creating a temporary test key with expiration, and then deleting it. Returns JSON with connection status, operation success, and latency measurement.
 
 ## ⏰ Cron Tips
 

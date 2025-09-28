@@ -8,8 +8,14 @@ import { WhatsAppClient } from './services/whatsapp.js'
 import { SchedulerService } from './services/scheduler.js'
 import { PubSubService } from './services/pubsub.js'
 import { apiKeyAuth } from './middleware/auth.js'
+import { redis } from './infra/redis.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
+
+// Validate required environment variables
+if (!process.env.REDIS_URL) {
+  throw new Error('REDIS_URL environment variable is required')
+}
 const STORAGE_DIR = process.env.STORAGE_DIR || process.cwd()
 const sessionsDir = path.resolve(STORAGE_DIR, 'sessions')
 const dataDir = path.resolve(STORAGE_DIR, 'data')
@@ -37,6 +43,43 @@ app.get('/health', (req, res) => {
     scheduledMessages: scheduler.list().length,
     activeJobs: scheduler.activeJobs()
   })
+})
+
+// Redis Health endpoint
+app.get('/health/redis', async (req, res) => {
+  const startTime = Date.now()
+  
+  try {
+    // Connect if needed
+    await redis.connect()
+    
+    // Ping Redis
+    await redis.ping()
+    
+    // Generate random test key
+    const testKey = `test:health:${Math.random().toString(36).substring(7)}`
+    
+    // Test write and delete operations
+    await redis.set(testKey, 'ok', 'EX', 5, 'NX')
+    await redis.del(testKey)
+    
+    const latencyMs = Date.now() - startTime
+    
+    res.json({
+      redis: 'ok',
+      writeDelete: 'ok',
+      latencyMs
+    })
+  } catch (error) {
+    const latencyMs = Date.now() - startTime
+    logger.error({ error }, 'Redis health check failed')
+    
+    res.status(500).json({
+      redis: 'fail',
+      reason: error instanceof Error ? error.message : 'Unknown error',
+      latencyMs
+    })
+  }
 })
 
 // QR endpoint
