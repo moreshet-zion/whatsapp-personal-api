@@ -101,6 +101,15 @@ Quick readiness probe for Redis:
 curl -sS http://localhost:8080/health/redis | jq
 ```
 
+**Response Format:**
+- ✅ **Redis Available**: `200 OK` with connection latency and timestamp
+- ❌ **Redis Unavailable**: `503 Service Unavailable` with error reason and helpful hints
+
+**Environment Variables:**
+- `REDIS_URL` - Redis connection URL (optional)
+  - Supports `redis://`, `rediss://`, and `redis+tls://` protocols
+  - If not set, Redis-dependent features gracefully return 503 errors
+
 ## 💡 Usage Examples
 
 Send immediate message

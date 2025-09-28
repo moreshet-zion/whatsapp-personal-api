@@ -31,6 +31,7 @@ test('GET /health/redis returns ok status and payload', async () => {
   assert.equal(response.body.redis, 'ok')
   assert.equal(response.body.writeDelete, 'ok')
   assert.equal(typeof response.body.latencyMs, 'number')
+  assert.equal(typeof response.body.timestamp, 'string')
 
   assert.equal(setCalls.length, 1)
   assert.equal(setCalls[0]?.value, 'ok')
@@ -52,6 +53,8 @@ test('GET /health/redis returns 503 when redis not configured', async () => {
   assert.equal(response.status, 503)
   assert.equal(response.body.redis, 'fail')
   assert.equal(response.body.reason, 'Redis not configured')
+  assert.equal(response.body.hint, 'Set REDIS_URL environment variable to enable Redis functionality')
+  assert.equal(typeof response.body.timestamp, 'string')
 })
 
 test('GET /health/redis returns 503 when redis operations fail', async () => {
@@ -73,4 +76,5 @@ test('GET /health/redis returns 503 when redis operations fail', async () => {
   assert.equal(response.status, 503)
   assert.equal(response.body.redis, 'fail')
   assert.equal(response.body.reason, 'Connection failed')
+  assert.equal(typeof response.body.timestamp, 'string')
 })
