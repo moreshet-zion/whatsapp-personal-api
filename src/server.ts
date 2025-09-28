@@ -8,12 +8,15 @@ import { WhatsAppClient } from './services/whatsapp.js'
 import { SchedulerService } from './services/scheduler.js'
 import { PubSubService } from './services/pubsub.js'
 import { apiKeyAuth } from './middleware/auth.js'
+import { redis } from './infra/redis.js'
+import { createRedisHealthHandler } from './routes/redisHealth.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
+
 const STORAGE_DIR = process.env.STORAGE_DIR || process.cwd()
 const sessionsDir = path.resolve(STORAGE_DIR, 'sessions')
 const dataDir = path.resolve(STORAGE_DIR, 'data')
-const app = express()
+export const app = express()
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 
 app.use(express.json())
@@ -38,6 +41,8 @@ app.get('/health', (req, res) => {
     activeJobs: scheduler.activeJobs()
   })
 })
+
+app.get('/health/redis', createRedisHealthHandler(redis))
 
 // QR endpoint
 app.get('/qr', async (req, res) => {
@@ -458,8 +463,10 @@ app.get('/schedule-examples', (req, res) => {
   })
 })
 
-app.listen(PORT, () => {
-  logger.info(`Server listening on http://localhost:${PORT}`)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    logger.info(`Server listening on http://localhost:${PORT}`)
+  })
+}
 
 

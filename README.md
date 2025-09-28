@@ -60,7 +60,8 @@ Configure comma‑separated keys via `API_TOKENS`.
 
 ### System & Health
 - `GET /health` — Connection status and system information
-- `GET /qr`, `GET /qr-image` — WhatsApp QR code for authentication  
+- `GET /health/redis` — Redis connectivity and write/delete readiness probe
+- `GET /qr`, `GET /qr-image` — WhatsApp QR code for authentication
 - `POST /restart` — Restart WhatsApp session
 - `GET /groups` — List WhatsApp groups
 
@@ -91,6 +92,23 @@ Configure comma‑separated keys via `API_TOKENS`.
 - `GET /schedule-examples` — Cron expression examples and help
 
 📖 **Complete API Documentation**: See [API Reference](docs/API_REFERENCE.md) for detailed schemas and examples.
+
+### Redis Health
+
+Quick readiness probe for Redis:
+
+```bash
+curl -sS http://localhost:8080/health/redis | jq
+```
+
+**Response Format:**
+- ✅ **Redis Available**: `200 OK` with connection latency and timestamp
+- ❌ **Redis Unavailable**: `503 Service Unavailable` with error reason and helpful hints
+
+**Environment Variables:**
+- `REDIS_URL` - Redis connection URL (optional)
+  - Supports `redis://`, `rediss://`, and `redis+tls://` protocols
+  - If not set, Redis-dependent features gracefully return 503 errors
 
 ## 💡 Usage Examples
 
