@@ -1,4 +1,4 @@
-import makeWASocket, { DisconnectReason, type WASocket, useMultiFileAuthState, Browsers } from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, type WASocket, useMultiFileAuthState, Browsers, type WAMessage } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import path from 'path'
@@ -18,6 +18,7 @@ export class WhatsAppClient {
   private qrState: QRState = {}
   private readonly sessionDir: string
   private readonly logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+  private messageHandlers: Array<(message: WAMessage) => void> = []
 
   constructor(sessionDir = path.resolve(process.cwd(), 'sessions')) {
     this.sessionDir = sessionDir
@@ -53,6 +54,9 @@ export class WhatsAppClient {
     this.status = this.socket.user ? 'connected' : 'disconnected'
 
     this.socket.ev.on('creds.update', saveCreds)
+    
+    // Set up message listener
+    this.setupMessageListener()
 
     this.socket.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update
@@ -112,6 +116,30 @@ export class WhatsAppClient {
       this.logger.error({ err }, 'Failed to fetch group chats')
       throw new Error('Failed to fetch group chats')
     }
+  }
+
+  public onMessage(handler: (message: WAMessage) => void): void {
+    this.messageHandlers.push(handler)
+  }
+
+  private setupMessageListener(): void {
+    if (!this.socket) return
+    
+    this.socket.ev.on('messages.upsert', (m) => {
+      const messages = m.messages || []
+      for (const message of messages) {
+        // Only process messages that are not from me
+        if (!message.key.fromMe) {
+          this.messageHandlers.forEach(handler => {
+            try {
+              handler(message)
+            } catch (err) {
+              this.logger.error({ err }, 'Message handler failed')
+            }
+          })
+        }
+      }
+    })
   }
 }
 

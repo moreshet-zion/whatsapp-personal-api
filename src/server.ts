@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { WhatsAppClient } from './services/whatsapp.js'
 import { SchedulerService } from './services/scheduler.js'
 import { PubSubService } from './services/pubsub.js'
+import { InboundMessageProcessor } from './services/inboundMessages.js'
 import { apiKeyAuth } from './middleware/auth.js'
 import { redis } from './infra/redis.js'
 import { createRedisHealthHandler } from './routes/redisHealth.js'
@@ -28,6 +29,12 @@ const PORT = Number(process.env.PORT || 3000)
 const whatsappClient = new WhatsAppClient(sessionsDir)
 const scheduler = new SchedulerService(dataDir, whatsappClient)
 const pubSub = new PubSubService(dataDir, whatsappClient)
+const inboundProcessor = new InboundMessageProcessor()
+
+// Set up inbound message processing
+whatsappClient.onMessage((message) => {
+  inboundProcessor.processMessage(message)
+})
 
 // Start WhatsApp client
 whatsappClient.start().catch((err) => logger.error({ err }, 'Failed to start WhatsApp client'))
@@ -43,6 +50,31 @@ app.get('/health', (req, res) => {
 })
 
 app.get('/health/redis', createRedisHealthHandler(redis))
+
+// Inbound messages stream endpoint (for debugging/monitoring)
+app.get('/inbound-messages', async (req, res) => {
+  if (!redis) {
+    return res.status(503).json({ success: false, error: 'Redis not configured' })
+  }
+  
+  try {
+    const count = parseInt(req.query.count as string || '10')
+    const messages = await redis.xrevrange('inbound_messages', '+', '-', 'COUNT', count)
+    
+    const formatted = messages.map(([id, fields]) => {
+      const data = JSON.parse(fields[1] || '{}') // fields is ['data', '{"id": ...}']
+      return {
+        streamId: id,
+        ...data
+      }
+    })
+    
+    res.json({ success: true, messages: formatted, count: formatted.length })
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch inbound messages')
+    res.status(500).json({ success: false, error: 'Failed to fetch messages' })
+  }
+})
 
 // QR endpoint
 app.get('/qr', async (req, res) => {
