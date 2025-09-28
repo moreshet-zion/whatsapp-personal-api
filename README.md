@@ -88,10 +88,54 @@ Configure comma‑separated keys via `API_TOKENS`.
 - `POST /pubsub/publish` — Broadcast messages to topic subscribers
 - `GET /pubsub/settings` — View/update broadcast settings
 
+### Settings
+- `GET /settings` — Get application settings including message history backend
+- `PUT /settings` — Update application settings
+- `GET /settings/recording-status` — Check message recording backend status
+
 ### Utilities
 - `GET /schedule-examples` — Cron expression examples and help
 
 📖 **Complete API Documentation**: See [API Reference](docs/API_REFERENCE.md) for detailed schemas and examples.
+
+### Sent History
+
+All successfully sent messages are automatically recorded using the configured backend. The system supports multiple backends for message history storage:
+
+**Backend Configuration**
+```bash
+# Configure Redis backend (default)
+curl -X PUT http://localhost:3000/settings \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{"history_backend": "redis"}'
+
+# Configure Base44 backend
+curl -X PUT http://localhost:3000/settings \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{"history_backend": "base44"}'
+```
+
+**Environment Variables for Base44**
+- `BASE44_URL` - Base44 API endpoint URL  
+- `BASE44_KEY` - Base44 API authentication key
+- `FLY_RELEASE_VERSION` - Used for external system identification (auto-set by Fly.io)
+
+**Redis Backend Usage** (when `history_backend: "redis"`)
+```bash
+# Show last 5 sent records
+XRANGE sent_history - + COUNT 5
+
+# Lookup by id
+HGETALL sent:index:<id>
+```
+
+**Status Check**
+```bash
+# Check recording backend status
+curl -H "x-api-key: <API_KEY>" http://localhost:3000/settings/recording-status
+```
 
 ### Redis Health
 

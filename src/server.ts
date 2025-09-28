@@ -10,6 +10,8 @@ import { PubSubService } from './services/pubsub.js'
 import { apiKeyAuth } from './middleware/auth.js'
 import { redis } from './infra/redis.js'
 import { createRedisHealthHandler } from './routes/redisHealth.js'
+import { SettingsService } from './services/settingsService.js'
+import { MessageRecordingService } from './services/messageRecordingService.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
 
@@ -26,8 +28,10 @@ const PORT = Number(process.env.PORT || 3000)
 
 // Instantiate services after env loaded
 const whatsappClient = new WhatsAppClient(sessionsDir)
-const scheduler = new SchedulerService(dataDir, whatsappClient)
-const pubSub = new PubSubService(dataDir, whatsappClient)
+const settingsService = new SettingsService(dataDir)
+const messageRecording = new MessageRecordingService(settingsService)
+const scheduler = new SchedulerService(dataDir, whatsappClient, messageRecording)
+const pubSub = new PubSubService(dataDir, whatsappClient, messageRecording)
 
 // Start WhatsApp client
 whatsappClient.start().catch((err) => logger.error({ err }, 'Failed to start WhatsApp client'))
@@ -118,7 +122,25 @@ app.post('/send', async (req, res) => {
       throw new Error('No recipient specified')
     }
     
-    await sock.sendMessage(jid, { text: parse.data.message })
+    const result = await sock.sendMessage(jid, { text: parse.data.message })
+    
+    // Record sent message using the configured backend
+    try {
+      const rec = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        ts: Date.now(),
+        to: parse.data.number || parse.data.jid || '',
+        chatId: jid,
+        via: 'text' as const,
+        bodyPreview: parse.data.message.slice(0, 120),
+        ...(result?.key?.id && { waMessageId: result.key.id })
+      }
+      await messageRecording.recordSent(rec)
+    } catch (err) {
+      // Don't fail the request if recording fails
+      logger.error({ err }, 'Failed to record sent message')
+    }
+    
     return res.json({ success: true, message: 'Message sent successfully' })
   } catch (err) {
     logger.error({ err }, 'Failed to send message')
@@ -446,6 +468,51 @@ app.post('/restart', async (req, res) => {
     res.json({ success: true, message: 'WhatsApp session restart initiated' })
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to restart' })
+  }
+})
+
+// Settings endpoints
+app.get('/settings', (req, res) => {
+  try {
+    const settings = settingsService.getSettings()
+    res.json({ success: true, settings })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get settings')
+    res.status(500).json({ success: false, error: 'Failed to get settings' })
+  }
+})
+
+const updateSettingsSchema = z.object({
+  history_backend: z.enum(['redis', 'base44']).optional()
+})
+
+app.put('/settings', (req, res) => {
+  const parse = updateSettingsSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid settings format', details: parse.error.issues })
+  }
+  
+  try {
+    const updates: any = {}
+    if (parse.data.history_backend !== undefined) {
+      updates.history_backend = parse.data.history_backend
+    }
+    const updatedSettings = settingsService.updateSettings(updates)
+    res.json({ success: true, message: 'Settings updated', settings: updatedSettings })
+  } catch (err) {
+    logger.error({ err }, 'Failed to update settings')
+    const message = err instanceof Error ? err.message : 'Failed to update settings'
+    res.status(400).json({ success: false, error: message })
+  }
+})
+
+app.get('/settings/recording-status', async (req, res) => {
+  try {
+    const status = await messageRecording.getBackendStatus()
+    res.json({ success: true, recording: status })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get recording status')
+    res.status(500).json({ success: false, error: 'Failed to get recording status' })
   }
 })
 
