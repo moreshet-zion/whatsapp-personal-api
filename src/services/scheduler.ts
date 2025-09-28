@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 import pino from 'pino'
 import type { ConnectionStatus, WhatsAppClient } from './whatsapp.js'
+import { recordSent } from '../queue/sentRecorder.js'
+import { isRedisConfigured, redis } from '../infra/redis.js'
 
 export const scheduledMessageSchema = z.object({
   id: z.string(),
@@ -89,8 +91,28 @@ export class SchedulerService {
           const sock = this.whatsappClient.getSocket()
           if (!sock) return
           const jid = this.formatJid(msg)
-          await sock.sendMessage(jid, { text: msg.message })
+          const result = await sock.sendMessage(jid, { text: msg.message })
           this.logger.info({ id: msg.id }, 'Scheduled message sent')
+          
+          // Record sent message if Redis is configured
+          if (isRedisConfigured && redis) {
+            try {
+              const rec = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                ts: Date.now(),
+                to: msg.number || msg.jid || '',
+                chatId: jid,
+                via: 'text' as const,
+                bodyPreview: msg.message.slice(0, 120),
+                correlationId: msg.id, // Use scheduled message ID as correlation
+                ...(result?.key?.id && { waMessageId: result.key.id })
+              }
+              await recordSent(rec)
+              this.logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+            } catch (err) {
+              this.logger.error({ err }, 'Failed to record sent message')
+            }
+          }
           if (msg.oneTime) {
             this.toggle(msg.id, false)
           }
@@ -143,8 +165,29 @@ export class SchedulerService {
       const sock = this.whatsappClient.getSocket()
       if (!sock) return
       const jid = this.formatJid(msg)
-      await sock.sendMessage(jid, { text: msg.message })
+      const result = await sock.sendMessage(jid, { text: msg.message })
       this.logger.info({ id: msg.id }, 'Scheduled message sent')
+      
+      // Record sent message if Redis is configured
+      if (isRedisConfigured && redis) {
+        try {
+          const rec = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            ts: Date.now(),
+            to: msg.number || msg.jid || '',
+            chatId: jid,
+            via: 'text' as const,
+            bodyPreview: msg.message.slice(0, 120),
+            correlationId: msg.id, // Use scheduled message ID as correlation
+            ...(result?.key?.id && { waMessageId: result.key.id })
+          }
+          await recordSent(rec)
+          this.logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+        } catch (err) {
+          this.logger.error({ err }, 'Failed to record sent message')
+        }
+      }
+      
       this.markAsExecuted(msg.id)
     } catch (err) {
       this.logger.error({ err }, 'Failed to send scheduled message')

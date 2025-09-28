@@ -8,8 +8,9 @@ import { WhatsAppClient } from './services/whatsapp.js'
 import { SchedulerService } from './services/scheduler.js'
 import { PubSubService } from './services/pubsub.js'
 import { apiKeyAuth } from './middleware/auth.js'
-import { redis } from './infra/redis.js'
+import { redis, isRedisConfigured } from './infra/redis.js'
 import { createRedisHealthHandler } from './routes/redisHealth.js'
+import { recordSent } from './queue/sentRecorder.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
 
@@ -118,7 +119,28 @@ app.post('/send', async (req, res) => {
       throw new Error('No recipient specified')
     }
     
-    await sock.sendMessage(jid, { text: parse.data.message })
+    const result = await sock.sendMessage(jid, { text: parse.data.message })
+    
+    // Record sent message if Redis is configured
+    if (isRedisConfigured && redis) {
+      try {
+        const rec = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+          ts: Date.now(),
+          to: parse.data.number || parse.data.jid || '',
+          chatId: jid,
+          via: 'text' as const,
+          bodyPreview: parse.data.message.slice(0, 120),
+          ...(result?.key?.id && { waMessageId: result.key.id })
+        }
+        await recordSent(rec)
+        logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+      } catch (err) {
+        // Don't fail the request if recording fails
+        logger.error({ err }, 'Failed to record sent message')
+      }
+    }
+    
     return res.json({ success: true, message: 'Message sent successfully' })
   } catch (err) {
     logger.error({ err }, 'Failed to send message')

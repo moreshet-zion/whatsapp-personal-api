@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid'
 import pino from 'pino'
 import { z } from 'zod'
 import type { WhatsAppClient } from './whatsapp.js'
+import { recordSent } from '../queue/sentRecorder.js'
+import { isRedisConfigured, redis } from '../infra/redis.js'
 
 const subscriberSchema = z.object({
   number: z.string(),
@@ -219,9 +221,29 @@ export class PubSubService {
     for (const [index, sub] of topic.subscribers.entries()) {
       const jid = this.formatJid(sub.number)
       try {
-        await socket.sendMessage(jid, { text: message })
+        const result = await socket.sendMessage(jid, { text: message })
         delivered += 1
         results.push({ number: sub.number, success: true })
+        
+        // Record sent message if Redis is configured
+        if (isRedisConfigured && redis) {
+          try {
+            const rec = {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+              ts: Date.now(),
+              to: sub.number,
+              chatId: jid,
+              via: 'text' as const,
+              bodyPreview: message.slice(0, 120),
+              correlationId: `topic:${topicId}`,
+              ...(result?.key?.id && { waMessageId: result.key.id })
+            }
+            await recordSent(rec)
+            this.logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+          } catch (err) {
+            this.logger.error({ err }, 'Failed to record sent message')
+          }
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to send message'
         results.push({ number: sub.number, success: false, error: errorMessage })

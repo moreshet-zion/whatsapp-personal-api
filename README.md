@@ -93,6 +93,18 @@ Configure comma‑separated keys via `API_TOKENS`.
 
 📖 **Complete API Documentation**: See [API Reference](docs/API_REFERENCE.md) for detailed schemas and examples.
 
+### Sent History
+
+When Redis is configured, all successfully sent messages are automatically recorded to `sent_history` Redis stream with a hash index for fast lookups.
+
+```bash
+# Show last 5 sent records
+XRANGE sent_history - + COUNT 5
+
+# Lookup by id
+HGETALL sent:index:<id>
+```
+
 ### Redis Health
 
 Quick readiness probe for Redis:
