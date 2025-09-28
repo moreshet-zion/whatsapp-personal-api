@@ -4,21 +4,8 @@ import { z } from 'zod';
 import pino from 'pino';
 import { RecorderSettings } from './sentMessageRecorder.js';
 
-const base44SettingsSchema = z.object({
-  url: z.string().url(),
-  apiKey: z.string().min(1)
-});
-
 const settingsSchema = z.object({
-  history_backend: z.enum(['redis', 'base44']).default('redis'),
-  base44: base44SettingsSchema.optional()
-}).refine((data) => {
-  if (data.history_backend === 'base44') {
-    return data.base44 && data.base44.url && data.base44.apiKey;
-  }
-  return true;
-}, {
-  message: "Base44 backend requires 'base44' configuration with 'url' and 'apiKey'"
+  history_backend: z.enum(['redis', 'base44']).default('redis')
 });
 
 export type AppSettings = z.infer<typeof settingsSchema>;
@@ -82,14 +69,8 @@ export class SettingsService {
   }
 
   public getRecorderSettings(): RecorderSettings {
-    const settings: RecorderSettings = {
+    return {
       history_backend: this.settings.history_backend
     };
-    
-    if (this.settings.base44) {
-      settings.base44 = this.settings.base44;
-    }
-    
-    return settings;
   }
 }

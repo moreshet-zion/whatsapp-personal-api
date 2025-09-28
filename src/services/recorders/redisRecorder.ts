@@ -1,20 +1,54 @@
+import IORedis from 'ioredis';
 import { SentMessageRecorder } from '../sentMessageRecorder.js';
 import { SentRecord } from '../../dto/messages.js';
-import { redis, isRedisConfigured, STREAM_SENT, ROUTING_MAXLEN } from '../../infra/redis.js';
+
+function validateRedisUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ['redis:', 'rediss:', 'redis+tls:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+// Redis Stream configuration constants
+const STREAM_SENT = process.env.STREAM_SENT || 'sent_history';
+const ROUTING_MAXLEN = parseInt(process.env.ROUTING_MAXLEN || '10000', 10);
 
 export class RedisRecorder implements SentMessageRecorder {
+  private readonly redis: IORedis | undefined;
+  private readonly isRedisConfigured: boolean;
+
+  constructor() {
+    const redisUrl = process.env.REDIS_URL;
+    
+    // Validate Redis URL format if provided
+    if (redisUrl && !validateRedisUrl(redisUrl)) {
+      console.warn(`Warning: REDIS_URL appears to be invalid: ${redisUrl}`);
+    }
+
+    this.redis = redisUrl
+      ? new IORedis(redisUrl, {
+          lazyConnect: true,
+          maxRetriesPerRequest: null
+        })
+      : undefined;
+    
+    this.isRedisConfigured = Boolean(redisUrl);
+  }
+
   async recordSent(record: SentRecord): Promise<string> {
-    if (!redis) {
+    if (!this.redis) {
       throw new Error('Redis not configured');
     }
     
     const json = JSON.stringify(record);
-    const id = await redis.xadd(
+    const id = await this.redis.xadd(
       STREAM_SENT, 'MAXLEN', '~', ROUTING_MAXLEN.toString(), '*', 'v', json
     );
     
     const idxKey = `sent:index:${record.id}`;
-    await redis.hset(idxKey, {
+    await this.redis.hset(idxKey, {
       ts: String(record.ts), 
       to: record.to, 
       chatId: record.chatId || '',
@@ -28,12 +62,12 @@ export class RedisRecorder implements SentMessageRecorder {
   }
 
   async isHealthy(): Promise<boolean> {
-    if (!isRedisConfigured || !redis) {
+    if (!this.isRedisConfigured || !this.redis) {
       return false;
     }
     
     try {
-      await redis.ping();
+      await this.redis.ping();
       return true;
     } catch {
       return false;

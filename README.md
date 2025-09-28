@@ -114,14 +114,13 @@ curl -X PUT http://localhost:3000/settings \
 curl -X PUT http://localhost:3000/settings \
   -H "Content-Type: application/json" \
   -H "x-api-key: <API_KEY>" \
-  -d '{
-    "history_backend": "base44",
-    "base44": {
-      "url": "https://api.base44.com/records",
-      "apiKey": "your-base44-api-key"
-    }
-  }'
+  -d '{"history_backend": "base44"}'
 ```
+
+**Environment Variables for Base44**
+- `BASE44_URL` - Base44 API endpoint URL  
+- `BASE44_KEY` - Base44 API authentication key
+- `FLY_RELEASE_VERSION` - Used for external system identification (auto-set by Fly.io)
 
 **Redis Backend Usage** (when `history_backend: "redis"`)
 ```bash

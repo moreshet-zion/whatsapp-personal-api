@@ -27,10 +27,6 @@ export interface SentMessageRecorder {
  */
 export interface RecorderSettings {
   history_backend: 'redis' | 'base44';
-  base44?: {
-    url: string;
-    apiKey: string;
-  };
 }
 
 /**
@@ -45,10 +41,7 @@ export class SentMessageRecorderFactory {
       
       case 'base44':
         const { Base44Recorder } = await import('./recorders/base44Recorder.js');
-        if (!settings.base44?.url || !settings.base44?.apiKey) {
-          throw new Error('Base44 recorder requires URL and API key configuration');
-        }
-        return new Base44Recorder(settings.base44.url, settings.base44.apiKey);
+        return new Base44Recorder();
       
       default:
         return null;

@@ -483,11 +483,7 @@ app.get('/settings', (req, res) => {
 })
 
 const updateSettingsSchema = z.object({
-  history_backend: z.enum(['redis', 'base44']).optional(),
-  base44: z.object({
-    url: z.string().url(),
-    apiKey: z.string().min(1)
-  }).optional()
+  history_backend: z.enum(['redis', 'base44']).optional()
 })
 
 app.put('/settings', (req, res) => {
@@ -500,9 +496,6 @@ app.put('/settings', (req, res) => {
     const updates: any = {}
     if (parse.data.history_backend !== undefined) {
       updates.history_backend = parse.data.history_backend
-    }
-    if (parse.data.base44 !== undefined) {
-      updates.base44 = parse.data.base44
     }
     const updatedSettings = settingsService.updateSettings(updates)
     res.json({ success: true, message: 'Settings updated', settings: updatedSettings })

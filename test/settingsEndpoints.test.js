@@ -20,31 +20,25 @@ test('PUT /settings updates backend configuration', async () => {
     .put('/settings')
     .set('x-api-key', API_KEY)
     .send({
-      history_backend: 'base44',
-      base44: {
-        url: 'https://test.example.com',
-        apiKey: 'test-api-key-123'
-      }
+      history_backend: 'base44'
     })
 
   assert.equal(response.status, 200)
   assert.equal(response.body.success, true)
   assert.equal(response.body.settings.history_backend, 'base44')
-  assert.equal(response.body.settings.base44.url, 'https://test.example.com')
 })
 
-test('PUT /settings validates base44 configuration', async () => {
+test('PUT /settings accepts valid enum values', async () => {
   const response = await request(app)
     .put('/settings')
     .set('x-api-key', API_KEY)
     .send({
-      history_backend: 'base44'
-      // Missing base44 config
+      history_backend: 'invalid-backend'
     })
 
   assert.equal(response.status, 400)
   assert.equal(response.body.success, false)
-  assert(response.body.error.includes('Base44 backend requires'))
+  assert(response.body.error.includes('Invalid settings format'))
 })
 
 test('GET /settings/recording-status returns backend status', async () => {
