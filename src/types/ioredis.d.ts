@@ -13,5 +13,6 @@ declare module 'ioredis' {
     del(key: string): Promise<number>
     xadd(stream: string, maxlen: string, type: string, limit: string, id: string, field: string, value: string): Promise<string>
     hset(key: string, data: Record<string, string>): Promise<number>
+    quit(): Promise<void>
   }
 }

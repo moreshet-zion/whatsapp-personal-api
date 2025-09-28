@@ -43,6 +43,11 @@ export class Base44Recorder implements SentMessageRecorder {
     return 'base44';
   }
 
+  async cleanup(): Promise<void> {
+    // Base44 recorder doesn't hold persistent connections, no cleanup needed
+    return Promise.resolve();
+  }
+
   private async makeBase44ApiCall(record: SentRecord): Promise<{ id: string }> {
     // Build payload according to Base44 API specification
     const payload: any = {

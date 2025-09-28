@@ -20,6 +20,11 @@ export interface SentMessageRecorder {
    * Get the backend name/type
    */
   getBackendType(): string;
+
+  /**
+   * Clean up resources and close connections
+   */
+  cleanup(): Promise<void>;
 }
 
 /**

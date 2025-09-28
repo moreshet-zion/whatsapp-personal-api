@@ -8,21 +8,80 @@ export class MessageRecordingService {
   private recorder: SentMessageRecorder | null = null;
   private lastHealthCheck = 0;
   private readonly healthCheckInterval = 30000; // 30 seconds
+  private currentBackendType: string | null = null;
 
   constructor(private readonly settingsService: SettingsService) {}
 
   private async ensureRecorder(): Promise<SentMessageRecorder | null> {
     const now = Date.now();
+    const settings = this.settingsService.getRecorderSettings();
+    const requestedBackend = settings.history_backend;
     
-    // Re-initialize recorder if settings might have changed or it's been a while
-    if (!this.recorder || (now - this.lastHealthCheck) > this.healthCheckInterval) {
-      try {
-        const settings = this.settingsService.getRecorderSettings();
-        this.recorder = await SentMessageRecorderFactory.create(settings);
-        this.lastHealthCheck = now;
-      } catch (err) {
-        this.logger.error({ err }, 'Failed to initialize message recorder');
+    // Check if we need to reinitialize the recorder
+    const needsReinit = 
+      !this.recorder ||                                              // No recorder exists
+      this.currentBackendType !== requestedBackend ||               // Backend type changed
+      (now - this.lastHealthCheck) > this.healthCheckInterval;      // Health check interval expired
+    
+    if (needsReinit) {
+      // Clean up the old recorder before creating a new one
+      if (this.recorder && this.currentBackendType !== requestedBackend) {
+        this.logger.info({ 
+          oldBackend: this.currentBackendType, 
+          newBackend: requestedBackend 
+        }, 'Backend type changed, cleaning up old recorder');
+        try {
+          await this.recorder.cleanup();
+        } catch (err) {
+          this.logger.warn({ err, backend: this.currentBackendType }, 'Error cleaning up old recorder');
+        }
         this.recorder = null;
+        this.currentBackendType = null;
+      }
+      
+      // If we have an existing recorder of the same type, check if it's still healthy
+      if (this.recorder && this.currentBackendType === requestedBackend) {
+        try {
+          const isHealthy = await this.recorder.isHealthy();
+          if (isHealthy) {
+            // Recorder is healthy, just update health check timestamp and reuse it
+            this.lastHealthCheck = now;
+            return this.recorder;
+          } else {
+            // Recorder is unhealthy, clean it up and create a new one
+            this.logger.info({ backend: this.currentBackendType }, 'Existing recorder is unhealthy, recreating');
+            try {
+              await this.recorder.cleanup();
+            } catch (err) {
+              this.logger.warn({ err, backend: this.currentBackendType }, 'Error cleaning up unhealthy recorder');
+            }
+            this.recorder = null;
+            this.currentBackendType = null;
+          }
+        } catch (err) {
+          this.logger.warn({ err, backend: this.currentBackendType }, 'Error checking recorder health, recreating');
+          try {
+            await this.recorder?.cleanup();
+          } catch (cleanupErr) {
+            this.logger.warn({ err: cleanupErr, backend: this.currentBackendType }, 'Error cleaning up recorder during health check failure');
+          }
+          this.recorder = null;
+          this.currentBackendType = null;
+        }
+      }
+      
+      // Create a new recorder if we don't have a healthy one
+      if (!this.recorder) {
+        try {
+          this.recorder = await SentMessageRecorderFactory.create(settings);
+          this.currentBackendType = requestedBackend;
+          this.lastHealthCheck = now;
+          this.logger.info({ backend: requestedBackend }, 'Created new message recorder');
+        } catch (err) {
+          this.logger.error({ err, backend: requestedBackend }, 'Failed to initialize message recorder');
+          this.recorder = null;
+          this.currentBackendType = null;
+        }
       }
     }
     
@@ -85,6 +144,24 @@ export class MessageRecordingService {
     } catch (err) {
       this.logger.error({ err }, 'Failed to get backend status');
       return null;
+    }
+  }
+
+  /**
+   * Cleanup method to properly close connections when the service is shutting down
+   */
+  public async cleanup(): Promise<void> {
+    if (this.recorder) {
+      this.logger.info({ backend: this.currentBackendType }, 'Cleaning up message recording service');
+      try {
+        await this.recorder.cleanup();
+      } catch (err) {
+        this.logger.warn({ err, backend: this.currentBackendType }, 'Error during message recording service cleanup');
+      } finally {
+        this.recorder = null;
+        this.currentBackendType = null;
+        this.lastHealthCheck = 0;
+      }
     }
   }
 }

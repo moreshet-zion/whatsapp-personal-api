@@ -77,4 +77,15 @@ export class RedisRecorder implements SentMessageRecorder {
   getBackendType(): string {
     return 'redis';
   }
+
+  async cleanup(): Promise<void> {
+    if (this.redis) {
+      try {
+        await this.redis.quit();
+      } catch (err) {
+        // Ignore errors during cleanup, connection might already be closed
+        console.warn('Warning: Error during Redis connection cleanup:', err);
+      }
+    }
+  }
 }
