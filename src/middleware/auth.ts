@@ -12,7 +12,7 @@ function parseAllowedTokens(): Set<string> {
 
 export function apiKeyAuth(req: Request, res: Response, next: NextFunction) {
   // Allow health checks without a key
-  if (req.method === 'GET' && req.path === '/health') {
+  if (req.method === 'GET' && req.path.startsWith('/health')) {
     return next()
   }
   const tokens = parseAllowedTokens()
