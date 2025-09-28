@@ -5,8 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 import pino from 'pino'
 import type { ConnectionStatus, WhatsAppClient } from './whatsapp.js'
-import { recordSent } from '../queue/sentRecorder.js'
-import { isRedisConfigured, redis } from '../infra/redis.js'
+import type { MessageRecordingService } from './messageRecordingService.js'
 
 export const scheduledMessageSchema = z.object({
   id: z.string(),
@@ -33,7 +32,11 @@ export class SchedulerService {
   private messages: ScheduledMessage[] = []
   private whatsappClient: WhatsAppClient
 
-  constructor(dataDir = path.resolve(process.cwd(), 'data'), whatsappClient: WhatsAppClient) {
+  constructor(
+    dataDir = path.resolve(process.cwd(), 'data'), 
+    whatsappClient: WhatsAppClient,
+    private readonly messageRecording?: MessageRecordingService
+  ) {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
     this.dataFile = path.join(dataDir, 'scheduled.json')
     this.whatsappClient = whatsappClient
@@ -94,8 +97,8 @@ export class SchedulerService {
           const result = await sock.sendMessage(jid, { text: msg.message })
           this.logger.info({ id: msg.id }, 'Scheduled message sent')
           
-          // Record sent message if Redis is configured
-          if (isRedisConfigured && redis) {
+          // Record sent message using the configured backend
+          if (this.messageRecording) {
             try {
               const rec = {
                 id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
@@ -107,8 +110,7 @@ export class SchedulerService {
                 correlationId: msg.id, // Use scheduled message ID as correlation
                 ...(result?.key?.id && { waMessageId: result.key.id })
               }
-              await recordSent(rec)
-              this.logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+              await this.messageRecording.recordSent(rec)
             } catch (err) {
               this.logger.error({ err }, 'Failed to record sent message')
             }
@@ -168,8 +170,8 @@ export class SchedulerService {
       const result = await sock.sendMessage(jid, { text: msg.message })
       this.logger.info({ id: msg.id }, 'Scheduled message sent')
       
-      // Record sent message if Redis is configured
-      if (isRedisConfigured && redis) {
+      // Record sent message using the configured backend
+      if (this.messageRecording) {
         try {
           const rec = {
             id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
@@ -181,8 +183,7 @@ export class SchedulerService {
             correlationId: msg.id, // Use scheduled message ID as correlation
             ...(result?.key?.id && { waMessageId: result.key.id })
           }
-          await recordSent(rec)
-          this.logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+          await this.messageRecording.recordSent(rec)
         } catch (err) {
           this.logger.error({ err }, 'Failed to record sent message')
         }

@@ -4,8 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import pino from 'pino'
 import { z } from 'zod'
 import type { WhatsAppClient } from './whatsapp.js'
-import { recordSent } from '../queue/sentRecorder.js'
-import { isRedisConfigured, redis } from '../infra/redis.js'
+import type { MessageRecordingService } from './messageRecordingService.js'
 
 const subscriberSchema = z.object({
   number: z.string(),
@@ -56,7 +55,11 @@ export class PubSubService {
     settings: { messageDelaySeconds: 1 }
   }
 
-  constructor(dataDir = path.resolve(process.cwd(), 'data'), whatsappClient: WhatsAppClient) {
+  constructor(
+    dataDir = path.resolve(process.cwd(), 'data'), 
+    whatsappClient: WhatsAppClient,
+    private readonly messageRecording?: MessageRecordingService
+  ) {
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true })
     }
@@ -225,8 +228,8 @@ export class PubSubService {
         delivered += 1
         results.push({ number: sub.number, success: true })
         
-        // Record sent message if Redis is configured
-        if (isRedisConfigured && redis) {
+        // Record sent message using the configured backend
+        if (this.messageRecording) {
           try {
             const rec = {
               id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
@@ -238,8 +241,7 @@ export class PubSubService {
               correlationId: `topic:${topicId}`,
               ...(result?.key?.id && { waMessageId: result.key.id })
             }
-            await recordSent(rec)
-            this.logger.info({ evt: 'sent_recorded', id: rec.id, to: rec.to, via: rec.via })
+            await this.messageRecording.recordSent(rec)
           } catch (err) {
             this.logger.error({ err }, 'Failed to record sent message')
           }

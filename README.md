@@ -88,6 +88,11 @@ Configure comma‑separated keys via `API_TOKENS`.
 - `POST /pubsub/publish` — Broadcast messages to topic subscribers
 - `GET /pubsub/settings` — View/update broadcast settings
 
+### Settings
+- `GET /settings` — Get application settings including message history backend
+- `PUT /settings` — Update application settings
+- `GET /settings/recording-status` — Check message recording backend status
+
 ### Utilities
 - `GET /schedule-examples` — Cron expression examples and help
 
@@ -95,14 +100,42 @@ Configure comma‑separated keys via `API_TOKENS`.
 
 ### Sent History
 
-When Redis is configured, all successfully sent messages are automatically recorded to `sent_history` Redis stream with a hash index for fast lookups.
+All successfully sent messages are automatically recorded using the configured backend. The system supports multiple backends for message history storage:
 
+**Backend Configuration**
+```bash
+# Configure Redis backend (default)
+curl -X PUT http://localhost:3000/settings \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{"history_backend": "redis"}'
+
+# Configure Base44 backend
+curl -X PUT http://localhost:3000/settings \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{
+    "history_backend": "base44",
+    "base44": {
+      "url": "https://api.base44.com/records",
+      "apiKey": "your-base44-api-key"
+    }
+  }'
+```
+
+**Redis Backend Usage** (when `history_backend: "redis"`)
 ```bash
 # Show last 5 sent records
 XRANGE sent_history - + COUNT 5
 
 # Lookup by id
 HGETALL sent:index:<id>
+```
+
+**Status Check**
+```bash
+# Check recording backend status
+curl -H "x-api-key: <API_KEY>" http://localhost:3000/settings/recording-status
 ```
 
 ### Redis Health
