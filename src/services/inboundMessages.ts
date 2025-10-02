@@ -152,17 +152,47 @@ export class InboundMessageProcessor {
     }
 
     try {
-      // Set deduplication key with TTL
-      await redis.setex(`dedupe:${message.dedupeKey}`, DEDUPE_TTL_SEC, '1')
+      const transaction = redis.multi()
 
-      // Publish to stream with automatic trimming
-      await redis.xadd(
+      // Publish to stream with automatic trimming; executed first so dedupe key is only set if this succeeds
+      transaction.xadd(
         STREAM_INBOUND,
         'MAXLEN', '~', ROUTING_MAXLEN, // ~ means approximate trimming for better performance
-        '*', // Auto-generate ID
+        '*',
         'data', JSON.stringify(message)
       )
 
+      // Set deduplication key with TTL once the stream write has succeeded
+      transaction.setex(
+        `dedupe:${message.dedupeKey}`,
+        DEDUPE_TTL_SEC,
+        '1'
+      )
+
+      const results = await transaction.exec()
+
+      if (!results) {
+        throw new Error('Redis transaction aborted')
+      }
+
+      const xaddResult = results[0]
+      const setResult = results[1]
+
+      if (!xaddResult) {
+        throw new Error('Redis transaction missing xadd result')
+      }
+
+      if (xaddResult[0]) {
+        throw xaddResult[0]
+      }
+
+      if (!setResult) {
+        throw new Error('Redis transaction missing setex result')
+      }
+
+      if (setResult[0]) {
+        throw setResult[0]
+      }
     } catch (err) {
       this.logger.error({ err, messageId: message.id }, 'Failed to publish message to Redis Stream')
       throw err
