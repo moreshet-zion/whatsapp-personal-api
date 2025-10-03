@@ -50,7 +50,15 @@ export class SchedulerService {
         const raw = fs.readFileSync(this.dataFile, 'utf8')
         const rawMessages = JSON.parse(raw)
         // Apply schema validation and defaults for backwards compatibility
-        this.messages = rawMessages.map((msg: any) => scheduledMessageSchema.parse(msg))
+        this.messages = rawMessages.map((msg: any) => {
+          const parsed = scheduledMessageSchema.parse(msg)
+          // Normalize: if number field contains a JID, move it to jid field
+          if (parsed.number && (parsed.number.includes('@g.us') || parsed.number.includes('@s.whatsapp.net') || parsed.number.includes('@broadcast'))) {
+            this.logger.warn({ id: parsed.id, number: parsed.number }, 'Loaded scheduled message with JID in number field, will normalize on next save')
+            // Don't modify here, let it be handled by formatJid, but log it
+          }
+          return parsed
+        })
       }
     } catch (err) {
       this.logger.error({ err }, 'Failed to load scheduled messages')
@@ -212,6 +220,11 @@ export class SchedulerService {
       // Use the provided JID directly (for groups or already formatted numbers)
       return msg.jid
     } else if (msg.number) {
+      // Check if the number field already contains a JID (e.g., group JID like 120363339062208504@g.us)
+      if (msg.number.includes('@g.us') || msg.number.includes('@s.whatsapp.net') || msg.number.includes('@broadcast')) {
+        // Already a JID, use it directly
+        return msg.number
+      }
       // Format the phone number as a JID
       const trimmed = msg.number.replace(/[^0-9]/g, '')
       return `${trimmed}@s.whatsapp.net`
@@ -408,6 +421,41 @@ export class SchedulerService {
     this.save()
     return this.messages[idx]
   }
+  
+  /**
+   * Normalize all scheduled messages: move JIDs from number field to jid field
+   * This is a utility method to fix messages that were created with JIDs in the wrong field
+   */
+  public normalizeAllMessages(): { fixed: number; messages: ScheduledMessage[] } {
+    let fixed = 0
+    this.messages.forEach((msg) => {
+      // Check if number field contains a JID
+      if (msg.number && (msg.number.includes('@g.us') || msg.number.includes('@s.whatsapp.net') || msg.number.includes('@broadcast'))) {
+        if (!msg.jid) {
+          // Move from number to jid
+          msg.jid = msg.number
+          msg.number = undefined
+          msg.updated = new Date().toISOString()
+          fixed++
+          this.logger.info({ id: msg.id, jid: msg.jid }, 'Normalized scheduled message: moved JID from number to jid field')
+        } else {
+          // Both exist, clear number field (jid takes precedence)
+          msg.number = undefined
+          msg.updated = new Date().toISOString()
+          fixed++
+          this.logger.info({ id: msg.id, jid: msg.jid }, 'Normalized scheduled message: cleared number field in favor of jid field')
+        }
+      }
+    })
+    
+    if (fixed > 0) {
+      this.save()
+      this.logger.info({ fixed }, 'Normalized scheduled messages')
+    }
+    
+    return { fixed, messages: this.messages }
+  }
 }
+
 
 // Instantiated in server.ts with configured storage paths

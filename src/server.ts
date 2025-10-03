@@ -110,14 +110,32 @@ app.post('/send', async (req, res) => {
     const sock = whatsappClient.getSocket()
     if (!sock) throw new Error('Socket not available')
     
+    let warning: string | undefined
+    
     // Determine the JID to use
     let jid: string
     if (parse.data.jid) {
-      // Use the provided JID directly (for groups or already formatted numbers)
-      jid = parse.data.jid
+      // Check if jid field contains a phone number instead of JID
+      if (!parse.data.jid.includes('@')) {
+        // Phone number in jid field
+        jid = `${parse.data.jid.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+        warning = `Phone number detected in 'jid' field. Automatically formatted. Please use 'number' field for phone numbers (e.g., ${parse.data.jid}).`
+        logger.warn({ jid: parse.data.jid }, 'Phone number detected in jid field')
+      } else {
+        // Use the provided JID directly (for groups or already formatted numbers)
+        jid = parse.data.jid
+      }
     } else if (parse.data.number) {
-      // Format the phone number as a JID
-      jid = `${parse.data.number.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+      // Check if the number field already contains a JID (e.g., group JID like 120363339062208504@g.us)
+      if (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast')) {
+        // Already a JID, use it directly
+        jid = parse.data.number
+        warning = `JID detected in 'number' field. Please use 'jid' field for group/broadcast identifiers (e.g., ${parse.data.number}).`
+        logger.warn({ number: parse.data.number }, 'JID detected in number field')
+      } else {
+        // Format the phone number as a JID
+        jid = `${parse.data.number.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+      }
     } else {
       throw new Error('No recipient specified')
     }
@@ -141,7 +159,9 @@ app.post('/send', async (req, res) => {
       logger.error({ err }, 'Failed to record sent message')
     }
     
-    return res.json({ success: true, message: 'Message sent successfully' })
+    const response: any = { success: true, message: 'Message sent successfully' }
+    if (warning) response.warning = warning
+    return res.json(response)
   } catch (err) {
     logger.error({ err }, 'Failed to send message')
     return res.status(500).json({ success: false, error: 'Failed to send message' })
@@ -197,11 +217,44 @@ app.post('/scheduled', (req, res) => {
       description: parse.data.description ?? '',
       oneTime: parse.data.oneTime ?? false
     }
-    if (parse.data.number) data.number = parse.data.number
-    if (parse.data.jid) data.jid = parse.data.jid
+    
+    let warning: string | undefined
+    
+    // Normalize: if number field contains a JID, move it to jid field
+    if (parse.data.number && (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast'))) {
+      // JID was mistakenly placed in number field
+      if (!parse.data.jid) {
+        data.jid = parse.data.number
+        warning = `JID detected in 'number' field. Automatically moved to 'jid' field. Please use 'jid' field for group/broadcast identifiers (e.g., ${parse.data.number}).`
+        logger.warn({ number: parse.data.number }, 'JID detected in number field, moved to jid field')
+      } else {
+        // Both provided, prefer jid field and ignore number
+        data.jid = parse.data.jid
+        warning = `JID provided in both 'number' and 'jid' fields. Using 'jid' field value (${parse.data.jid}). The 'number' field should contain phone numbers only.`
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'JID provided in both fields, using jid field')
+      }
+    } else if (parse.data.jid && !parse.data.jid.includes('@')) {
+      // Phone number was placed in jid field
+      if (!parse.data.number) {
+        data.number = parse.data.jid
+        warning = `Phone number detected in 'jid' field. Automatically moved to 'number' field. Please use 'number' field for phone numbers (e.g., ${parse.data.jid}).`
+        logger.warn({ jid: parse.data.jid }, 'Phone number detected in jid field, moved to number field')
+      } else {
+        // Both provided, prefer number field for phone numbers
+        data.number = parse.data.number
+        warning = `Phone number provided in both 'number' and 'jid' fields. Using 'number' field value (${parse.data.number}). The 'jid' field should contain JIDs with @ symbol.`
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'Phone number provided in both fields, using number field')
+      }
+    } else {
+      // Normal case: assign as provided
+      if (parse.data.number) data.number = parse.data.number
+      if (parse.data.jid) data.jid = parse.data.jid
+    }
     
     const msg = scheduler.create(data)
-    res.json({ success: true, message: 'Scheduled message created', scheduledMessage: msg })
+    const response: any = { success: true, message: 'Scheduled message created', scheduledMessage: msg }
+    if (warning) response.warning = warning
+    res.json(response)
   } catch (err) {
     return res.status(400).json({ success: false, error: (err as Error).message || 'Invalid cron schedule' })
   }
@@ -224,8 +277,43 @@ app.put('/scheduled/:id', (req, res) => {
   }
   try {
     const updates: any = {}
-    if (parse.data.number !== undefined) updates.number = parse.data.number
-    if (parse.data.jid !== undefined) updates.jid = parse.data.jid
+    let warning: string | undefined
+    
+    // Normalize: if number field contains a JID, move it to jid field
+    if (parse.data.number !== undefined && parse.data.number && (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast'))) {
+      // JID was mistakenly placed in number field
+      if (parse.data.jid === undefined) {
+        updates.jid = parse.data.number
+        updates.number = undefined // Clear the number field
+        warning = `JID detected in 'number' field. Automatically moved to 'jid' field. Please use 'jid' field for group/broadcast identifiers (e.g., ${parse.data.number}).`
+        logger.warn({ number: parse.data.number }, 'JID detected in number field during update, moved to jid field')
+      } else {
+        // Both provided, prefer jid field
+        updates.jid = parse.data.jid
+        updates.number = undefined // Clear the number field
+        warning = `JID provided in both 'number' and 'jid' fields. Using 'jid' field value (${parse.data.jid}). The 'number' field should contain phone numbers only.`
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'JID provided in both fields during update, using jid field')
+      }
+    } else if (parse.data.jid !== undefined && parse.data.jid && !parse.data.jid.includes('@')) {
+      // Phone number was placed in jid field
+      if (parse.data.number === undefined) {
+        updates.number = parse.data.jid
+        updates.jid = undefined // Clear the jid field
+        warning = `Phone number detected in 'jid' field. Automatically moved to 'number' field. Please use 'number' field for phone numbers (e.g., ${parse.data.jid}).`
+        logger.warn({ jid: parse.data.jid }, 'Phone number detected in jid field during update, moved to number field')
+      } else {
+        // Both provided, prefer number field for phone numbers
+        updates.number = parse.data.number
+        updates.jid = undefined // Clear the jid field
+        warning = `Phone number provided in both 'number' and 'jid' fields. Using 'number' field value (${parse.data.number}). The 'jid' field should contain JIDs with @ symbol.`
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'Phone number provided in both fields during update, using number field')
+      }
+    } else {
+      // Normal case: assign as provided
+      if (parse.data.number !== undefined) updates.number = parse.data.number
+      if (parse.data.jid !== undefined) updates.jid = parse.data.jid
+    }
+    
     if (parse.data.message !== undefined) updates.message = parse.data.message
     if (parse.data.schedule !== undefined) updates.schedule = parse.data.schedule
     if (parse.data.scheduleDate !== undefined) updates.scheduleDate = parse.data.scheduleDate
@@ -234,7 +322,9 @@ app.put('/scheduled/:id', (req, res) => {
     if (parse.data.active !== undefined) updates.active = parse.data.active
     const updated = scheduler.update(req.params.id, updates)
     if (!updated) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
-    res.json({ success: true, message: 'Scheduled message updated', scheduledMessage: updated })
+    const response: any = { success: true, message: 'Scheduled message updated', scheduledMessage: updated }
+    if (warning) response.warning = warning
+    res.json(response)
   } catch (err) {
     return res.status(400).json({ success: false, error: (err as Error).message })
   }
@@ -250,6 +340,22 @@ app.post('/scheduled/:id/toggle', (req, res) => {
   const toggled = scheduler.toggle(req.params.id)
   if (!toggled) return res.status(404).json({ success: false, error: 'Scheduled message not found' })
   res.json({ success: true, message: toggled.active ? 'Scheduled message activated' : 'Scheduled message deactivated', scheduledMessage: toggled })
+})
+
+// Normalize scheduled messages - fix messages with JIDs in the wrong field
+app.post('/scheduled/normalize', (req, res) => {
+  try {
+    const result = scheduler.normalizeAllMessages()
+    res.json({ 
+      success: true, 
+      message: `Normalized ${result.fixed} scheduled message(s)`, 
+      fixed: result.fixed,
+      totalMessages: result.messages.length 
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to normalize scheduled messages')
+    return res.status(500).json({ success: false, error: 'Failed to normalize scheduled messages' })
+  }
 })
 
 // Schedule a one-time message at a specific date/time
@@ -274,11 +380,44 @@ app.post('/scheduleDate', (req, res) => {
       scheduleDate: parse.data.scheduleDate,
       description: parse.data.description || ''
     }
-    if (parse.data.number) data.number = parse.data.number
-    if (parse.data.jid) data.jid = parse.data.jid
+    
+    let warning: string | undefined
+    
+    // Normalize: if number field contains a JID, move it to jid field
+    if (parse.data.number && (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast'))) {
+      // JID was mistakenly placed in number field
+      if (!parse.data.jid) {
+        data.jid = parse.data.number
+        warning = `JID detected in 'number' field. Automatically moved to 'jid' field. Please use 'jid' field for group/broadcast identifiers (e.g., ${parse.data.number}).`
+        logger.warn({ number: parse.data.number }, 'JID detected in number field, moved to jid field')
+      } else {
+        // Both provided, prefer jid field and ignore number
+        data.jid = parse.data.jid
+        warning = `JID provided in both 'number' and 'jid' fields. Using 'jid' field value (${parse.data.jid}). The 'number' field should contain phone numbers only.`
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'JID provided in both fields, using jid field')
+      }
+    } else if (parse.data.jid && !parse.data.jid.includes('@')) {
+      // Phone number was placed in jid field
+      if (!parse.data.number) {
+        data.number = parse.data.jid
+        warning = `Phone number detected in 'jid' field. Automatically moved to 'number' field. Please use 'number' field for phone numbers (e.g., ${parse.data.jid}).`
+        logger.warn({ jid: parse.data.jid }, 'Phone number detected in jid field, moved to number field')
+      } else {
+        // Both provided, prefer number field for phone numbers
+        data.number = parse.data.number
+        warning = `Phone number provided in both 'number' and 'jid' fields. Using 'number' field value (${parse.data.number}). The 'jid' field should contain JIDs with @ symbol.`
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'Phone number provided in both fields, using number field')
+      }
+    } else {
+      // Normal case: assign as provided
+      if (parse.data.number) data.number = parse.data.number
+      if (parse.data.jid) data.jid = parse.data.jid
+    }
     
     const msg = scheduler.createDateSchedule(data)
-    res.json({ success: true, message: 'Date-based scheduled message created', scheduledMessage: msg })
+    const response: any = { success: true, message: 'Date-based scheduled message created', scheduledMessage: msg }
+    if (warning) response.warning = warning
+    res.json(response)
   } catch (err) {
     return res.status(400).json({ success: false, error: (err as Error).message })
   }
