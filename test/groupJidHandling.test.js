@@ -75,8 +75,12 @@ test('POST /scheduled with group JID in number field (edge case that caused the 
   assert.equal(response.status, 200)
   assert.equal(response.body.success, true)
   assert.ok(response.body.scheduledMessage)
-  // The number field should be preserved as-is
-  assert.equal(response.body.scheduledMessage.number, '120363339062208504@g.us')
+  // Should have a warning about field mismatch
+  assert.ok(response.body.warning)
+  assert.ok(response.body.warning.includes('JID detected'))
+  // The JID should be moved to jid field
+  assert.equal(response.body.scheduledMessage.jid, '120363339062208504@g.us')
+  assert.equal(response.body.scheduledMessage.number, undefined)
   
   // Clean up: delete the scheduled message
   if (response.body.scheduledMessage?.id) {
@@ -168,6 +172,37 @@ test('POST /scheduled with regular phone number', async () => {
   assert.equal(response.body.success, true)
   assert.ok(response.body.scheduledMessage)
   assert.equal(response.body.scheduledMessage.number, '1234567890')
+  // Should NOT have a warning
+  assert.equal(response.body.warning, undefined)
+  
+  // Clean up: delete the scheduled message
+  if (response.body.scheduledMessage?.id) {
+    await request(app)
+      .delete(`/scheduled/${response.body.scheduledMessage.id}`)
+      .set('x-api-key', process.env.API_TOKENS?.split(',')[0] || 'test-key')
+  }
+})
+
+test('POST /scheduled with phone number in jid field (wrong field)', async () => {
+  const response = await request(app)
+    .post('/scheduled')
+    .set('x-api-key', process.env.API_TOKENS?.split(',')[0] || 'test-key')
+    .send({
+      jid: '1234567890',
+      message: 'Scheduled message with phone in jid field',
+      schedule: '0 12 * * *'
+    })
+
+  // Should succeed in creating the scheduled message
+  assert.equal(response.status, 200)
+  assert.equal(response.body.success, true)
+  assert.ok(response.body.scheduledMessage)
+  // Should have a warning about field mismatch
+  assert.ok(response.body.warning)
+  assert.ok(response.body.warning.includes('Phone number detected'))
+  // The phone number should be moved to number field
+  assert.equal(response.body.scheduledMessage.number, '1234567890')
+  assert.equal(response.body.scheduledMessage.jid, undefined)
   
   // Clean up: delete the scheduled message
   if (response.body.scheduledMessage?.id) {
