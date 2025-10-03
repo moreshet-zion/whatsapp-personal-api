@@ -33,6 +33,15 @@ const messageRecording = new MessageRecordingService(settingsService)
 const scheduler = new SchedulerService(dataDir, whatsappClient, messageRecording)
 const pubSub = new PubSubService(dataDir, whatsappClient, messageRecording)
 
+// Set up inbound message handler for recording
+whatsappClient.setMessageHandler(async (message) => {
+  try {
+    await messageRecording.recordInbound(message)
+  } catch (err) {
+    logger.error({ err, messageId: message.id }, 'Failed to record inbound message')
+  }
+})
+
 // Start WhatsApp client
 whatsappClient.start().catch((err) => logger.error({ err }, 'Failed to start WhatsApp client'))
 

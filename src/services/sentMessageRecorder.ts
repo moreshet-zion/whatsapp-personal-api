@@ -1,4 +1,4 @@
-import { SentRecord } from '../dto/messages.js';
+import { SentRecord, InboundMessage } from '../dto/messages.js';
 
 /**
  * Interface for recording sent messages to different backends
@@ -10,6 +10,28 @@ export interface SentMessageRecorder {
    * @returns Promise resolving to the record ID or identifier
    */
   recordSent(record: SentRecord): Promise<string>;
+
+  /**
+   * Check if the backend is available and healthy
+   */
+  isHealthy(): Promise<boolean>;
+
+  /**
+   * Get the backend name/type
+   */
+  getBackendType(): string;
+}
+
+/**
+ * Interface for recording inbound messages to different backends
+ */
+export interface InboundMessageRecorder {
+  /**
+   * Record an inbound message
+   * @param message The inbound message to store
+   * @returns Promise resolving to the record ID or identifier
+   */
+  recordInbound(message: InboundMessage): Promise<string>;
 
   /**
    * Check if the backend is available and healthy
@@ -42,6 +64,26 @@ export class SentMessageRecorderFactory {
       case 'base44':
         const { Base44Recorder } = await import('./recorders/base44Recorder.js');
         return new Base44Recorder();
+      
+      default:
+        return null;
+    }
+  }
+}
+
+/**
+ * Factory for creating inbound message recorders based on settings
+ */
+export class InboundMessageRecorderFactory {
+  static async create(settings: RecorderSettings): Promise<InboundMessageRecorder | null> {
+    switch (settings.history_backend) {
+      case 'redis':
+        const { RedisInboundRecorder } = await import('./recorders/redisInboundRecorder.js');
+        return new RedisInboundRecorder();
+      
+      case 'base44':
+        // Base44 doesn't support inbound recording yet
+        return null;
       
       default:
         return null;

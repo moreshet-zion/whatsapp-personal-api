@@ -1,8 +1,9 @@
-import makeWASocket, { DisconnectReason, type WASocket, useMultiFileAuthState, Browsers } from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, type WASocket, useMultiFileAuthState, Browsers, type WAMessage } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import path from 'path'
 import fs from 'fs'
+import { InboundMessage, MessageType } from '../dto/messages.js'
 
 export type ConnectionStatus = 'connected' | 'disconnected'
 
@@ -18,6 +19,7 @@ export class WhatsAppClient {
   private qrState: QRState = {}
   private readonly sessionDir: string
   private readonly logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+  private messageHandler: ((message: InboundMessage) => void) | null = null
 
   constructor(sessionDir = path.resolve(process.cwd(), 'sessions')) {
     this.sessionDir = sessionDir
@@ -37,6 +39,81 @@ export class WhatsAppClient {
 
   public getSocket(): WASocket | null {
     return this.socket
+  }
+
+  public setMessageHandler(handler: (message: InboundMessage) => void): void {
+    this.messageHandler = handler
+  }
+
+  private convertWAMessageToInbound(waMessage: WAMessage): InboundMessage | null {
+    try {
+      if (!waMessage.key || !waMessage.key.remoteJid || !waMessage.messageTimestamp) {
+        return null
+      }
+
+      const messageId = waMessage.key.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const timestamp = typeof waMessage.messageTimestamp === 'number' 
+        ? waMessage.messageTimestamp * 1000 
+        : parseInt(waMessage.messageTimestamp.toString()) * 1000
+      const from = waMessage.key.remoteJid
+      const chatId = waMessage.key.remoteJid
+      
+      // Determine message type and extract content
+      let messageType: MessageType = 'unknown'
+      let text: string | undefined
+      let mediaUrl: string | undefined
+
+      if (waMessage.message) {
+        if (waMessage.message.conversation) {
+          messageType = 'text'
+          text = waMessage.message.conversation
+        } else if (waMessage.message.extendedTextMessage) {
+          messageType = 'text'
+          text = waMessage.message.extendedTextMessage.text || undefined
+        } else if (waMessage.message.imageMessage) {
+          messageType = 'image'
+          text = waMessage.message.imageMessage.caption || undefined
+        } else if (waMessage.message.videoMessage) {
+          messageType = 'video'
+          text = waMessage.message.videoMessage.caption || undefined
+        } else if (waMessage.message.audioMessage) {
+          messageType = 'audio'
+        } else if (waMessage.message.documentMessage) {
+          messageType = 'document'
+          text = waMessage.message.documentMessage.caption || undefined
+        } else if (waMessage.message.stickerMessage) {
+          messageType = 'sticker'
+        }
+      }
+
+      // Create dedupe key based on message ID and timestamp
+      const dedupeKey = `${messageId}-${timestamp}`
+      const conversationKey = chatId
+
+      const result: InboundMessage = {
+        id: messageId,
+        ts: timestamp,
+        from,
+        to: this.socket?.user?.id || 'unknown',
+        chatId,
+        type: messageType,
+        dedupeKey,
+        conversationKey,
+        metadata: {
+          fromMe: waMessage.key.fromMe || false,
+          participant: waMessage.key.participant || '',
+          pushName: waMessage.pushName || ''
+        }
+      }
+
+      if (text) result.text = text
+      if (mediaUrl) result.mediaUrl = mediaUrl
+
+      return result
+    } catch (err) {
+      this.logger.error({ err, messageKey: waMessage.key }, 'Failed to convert WhatsApp message to inbound format')
+      return null
+    }
   }
 
   public async start(): Promise<void> {
@@ -76,6 +153,26 @@ export class WhatsAppClient {
           setTimeout(() => {
             this.start().catch((err) => this.logger.error({ err }, 'Reconnection failed'))
           }, 1000)
+        }
+      }
+    })
+
+    // Listen for incoming messages
+    this.socket.ev.on('messages.upsert', async (messageUpdate) => {
+      if (!this.messageHandler) return
+
+      for (const waMessage of messageUpdate.messages) {
+        // Skip messages sent by us
+        if (waMessage.key.fromMe) continue
+
+        // Convert WhatsApp message to our inbound format
+        const inboundMessage = this.convertWAMessageToInbound(waMessage)
+        if (inboundMessage) {
+          try {
+            this.messageHandler(inboundMessage)
+          } catch (err) {
+            this.logger.error({ err, messageId: inboundMessage.id }, 'Error in message handler')
+          }
         }
       }
     })
