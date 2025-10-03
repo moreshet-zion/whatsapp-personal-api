@@ -203,8 +203,23 @@ app.post('/scheduled', (req, res) => {
       description: parse.data.description ?? '',
       oneTime: parse.data.oneTime ?? false
     }
-    if (parse.data.number) data.number = parse.data.number
-    if (parse.data.jid) data.jid = parse.data.jid
+    
+    // Normalize: if number field contains a JID, move it to jid field
+    if (parse.data.number && (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast'))) {
+      // JID was mistakenly placed in number field
+      if (!parse.data.jid) {
+        data.jid = parse.data.number
+        logger.warn({ number: parse.data.number }, 'JID detected in number field, moved to jid field')
+      } else {
+        // Both provided, prefer jid field and ignore number
+        data.jid = parse.data.jid
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'JID provided in both fields, using jid field')
+      }
+    } else {
+      // Normal case: assign as provided
+      if (parse.data.number) data.number = parse.data.number
+      if (parse.data.jid) data.jid = parse.data.jid
+    }
     
     const msg = scheduler.create(data)
     res.json({ success: true, message: 'Scheduled message created', scheduledMessage: msg })
@@ -230,8 +245,26 @@ app.put('/scheduled/:id', (req, res) => {
   }
   try {
     const updates: any = {}
-    if (parse.data.number !== undefined) updates.number = parse.data.number
-    if (parse.data.jid !== undefined) updates.jid = parse.data.jid
+    
+    // Normalize: if number field contains a JID, move it to jid field
+    if (parse.data.number !== undefined && parse.data.number && (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast'))) {
+      // JID was mistakenly placed in number field
+      if (parse.data.jid === undefined) {
+        updates.jid = parse.data.number
+        updates.number = undefined // Clear the number field
+        logger.warn({ number: parse.data.number }, 'JID detected in number field during update, moved to jid field')
+      } else {
+        // Both provided, prefer jid field
+        updates.jid = parse.data.jid
+        updates.number = undefined // Clear the number field
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'JID provided in both fields during update, using jid field')
+      }
+    } else {
+      // Normal case: assign as provided
+      if (parse.data.number !== undefined) updates.number = parse.data.number
+      if (parse.data.jid !== undefined) updates.jid = parse.data.jid
+    }
+    
     if (parse.data.message !== undefined) updates.message = parse.data.message
     if (parse.data.schedule !== undefined) updates.schedule = parse.data.schedule
     if (parse.data.scheduleDate !== undefined) updates.scheduleDate = parse.data.scheduleDate
@@ -258,6 +291,22 @@ app.post('/scheduled/:id/toggle', (req, res) => {
   res.json({ success: true, message: toggled.active ? 'Scheduled message activated' : 'Scheduled message deactivated', scheduledMessage: toggled })
 })
 
+// Normalize scheduled messages - fix messages with JIDs in the wrong field
+app.post('/scheduled/normalize', (req, res) => {
+  try {
+    const result = scheduler.normalizeAllMessages()
+    res.json({ 
+      success: true, 
+      message: `Normalized ${result.fixed} scheduled message(s)`, 
+      fixed: result.fixed,
+      totalMessages: result.messages.length 
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to normalize scheduled messages')
+    return res.status(500).json({ success: false, error: 'Failed to normalize scheduled messages' })
+  }
+})
+
 // Schedule a one-time message at a specific date/time
 const scheduleDateSchema = z.object({
   number: z.string().optional(),
@@ -280,8 +329,23 @@ app.post('/scheduleDate', (req, res) => {
       scheduleDate: parse.data.scheduleDate,
       description: parse.data.description || ''
     }
-    if (parse.data.number) data.number = parse.data.number
-    if (parse.data.jid) data.jid = parse.data.jid
+    
+    // Normalize: if number field contains a JID, move it to jid field
+    if (parse.data.number && (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast'))) {
+      // JID was mistakenly placed in number field
+      if (!parse.data.jid) {
+        data.jid = parse.data.number
+        logger.warn({ number: parse.data.number }, 'JID detected in number field, moved to jid field')
+      } else {
+        // Both provided, prefer jid field and ignore number
+        data.jid = parse.data.jid
+        logger.warn({ number: parse.data.number, jid: parse.data.jid }, 'JID provided in both fields, using jid field')
+      }
+    } else {
+      // Normal case: assign as provided
+      if (parse.data.number) data.number = parse.data.number
+      if (parse.data.jid) data.jid = parse.data.jid
+    }
     
     const msg = scheduler.createDateSchedule(data)
     res.json({ success: true, message: 'Date-based scheduled message created', scheduledMessage: msg })
