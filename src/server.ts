@@ -116,8 +116,14 @@ app.post('/send', async (req, res) => {
       // Use the provided JID directly (for groups or already formatted numbers)
       jid = parse.data.jid
     } else if (parse.data.number) {
-      // Format the phone number as a JID
-      jid = `${parse.data.number.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+      // Check if the number field already contains a JID (e.g., group JID like 120363339062208504@g.us)
+      if (parse.data.number.includes('@g.us') || parse.data.number.includes('@s.whatsapp.net') || parse.data.number.includes('@broadcast')) {
+        // Already a JID, use it directly
+        jid = parse.data.number
+      } else {
+        // Format the phone number as a JID
+        jid = `${parse.data.number.replace(/[^0-9]/g, '')}@s.whatsapp.net`
+      }
     } else {
       throw new Error('No recipient specified')
     }

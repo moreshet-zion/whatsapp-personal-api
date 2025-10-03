@@ -212,6 +212,11 @@ export class SchedulerService {
       // Use the provided JID directly (for groups or already formatted numbers)
       return msg.jid
     } else if (msg.number) {
+      // Check if the number field already contains a JID (e.g., group JID like 120363339062208504@g.us)
+      if (msg.number.includes('@g.us') || msg.number.includes('@s.whatsapp.net') || msg.number.includes('@broadcast')) {
+        // Already a JID, use it directly
+        return msg.number
+      }
       // Format the phone number as a JID
       const trimmed = msg.number.replace(/[^0-9]/g, '')
       return `${trimmed}@s.whatsapp.net`
