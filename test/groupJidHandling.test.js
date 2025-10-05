@@ -132,7 +132,8 @@ test('POST /scheduleDate with group JID in number field (edge case)', async () =
   assert.equal(response.status, 200)
   assert.equal(response.body.success, true)
   assert.ok(response.body.scheduledMessage)
-  assert.equal(response.body.scheduledMessage.number, '120363339062208504@g.us')
+  // The JID should be moved from number to jid field
+  assert.equal(response.body.scheduledMessage.jid, '120363339062208504@g.us')
   
   // Clean up: delete the scheduled message
   if (response.body.scheduledMessage?.id) {
