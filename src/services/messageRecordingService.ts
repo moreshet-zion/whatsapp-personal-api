@@ -38,6 +38,7 @@ export class MessageRecordingService {
       try {
         const settings = this.settingsService.getRecorderSettings();
         this.inboundRecorder = await InboundMessageRecorderFactory.create(settings);
+        this.lastHealthCheck = now;
       } catch (err) {
         this.logger.error({ err }, 'Failed to initialize inbound message recorder');
         this.inboundRecorder = null;
