@@ -29,7 +29,7 @@ DEDUPE_TTL_SEC=86400                 # Deduplication TTL (24 hours)
 ### Inbound Messages Stream
 
 - **Stream Name**: `inbound_messages` (configurable via `STREAM_INBOUND`)
-- **Message Format**: JSON-encoded `InboundMessage` objects
+- **Message Format**: JSON-encoded `InboundMessage` objects stored under the `json` field
 - **Deduplication**: Uses message ID + timestamp as dedupe key
 - **Indexing**: Creates hash indexes for quick message lookups
 

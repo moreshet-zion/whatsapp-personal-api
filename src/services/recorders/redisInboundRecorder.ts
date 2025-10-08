@@ -51,7 +51,7 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
     
     const json = JSON.stringify(message);
     const streamId = await this.redis.xadd(
-      STREAM_INBOUND, 'MAXLEN', '~', ROUTING_MAXLEN.toString(), '*', 'v', json
+      STREAM_INBOUND, 'MAXLEN', '~', ROUTING_MAXLEN.toString(), '*', 'json', json
     );
     
     // Store deduplication key with TTL
