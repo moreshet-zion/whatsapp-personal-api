@@ -123,6 +123,17 @@ export class WhatsAppClient {
       // Only add text field if we have text content
       if (text) {
         result.text = text;
+      } else if (waMessage.message) {
+        // Fallback: if we couldn't extract text, stringify the raw message
+        // This ensures we ALWAYS capture the actual message content, not just metadata
+        const unwrapped = this.unwrapMessage(waMessage.message);
+        result.text = JSON.stringify(unwrapped);
+        this.logger.warn({ 
+          evt: 'baileys_text_extraction_fallback', 
+          messageId: messageId,
+          messageType: type,
+          rawMessage: unwrapped
+        }, 'Could not extract text from message, using raw message as fallback');
       }
 
       this.logger.info({ evt: 'baileys_inbound_converted', message: result }, 'Converted inbound message for recording')
