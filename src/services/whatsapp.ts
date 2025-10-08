@@ -45,6 +45,43 @@ export class WhatsAppClient {
     this.messageHandler = handler
   }
 
+  private unwrapMessage(message?: any): any {
+    return message?.ephemeralMessage?.message
+        ?? message?.viewOnceMessageV2?.message
+        ?? message?.documentWithCaptionMessage?.message
+        ?? message;
+  }
+
+  private extractTextAndType(rawMessage: any): { type: MessageType; text?: string } {
+    const message = this.unwrapMessage(rawMessage?.message);
+
+    // Check for specific message types first before extracting text
+    if (message?.reactionMessage) return { type: 'reaction', text: message.reactionMessage.text };
+    if (message?.imageMessage && !message.imageMessage.caption) return { type: 'image' };
+    if (message?.videoMessage && !message.videoMessage.caption) return { type: 'video' };
+    if (message?.stickerMessage) return { type: 'sticker' };
+    if (message?.audioMessage) return { type: 'audio' };
+    if (message?.documentMessage && !message.documentMessage.caption) return { type: 'document' };
+
+    // Plain/extended text and captions
+    const text =
+      message?.conversation ??
+      message?.extendedTextMessage?.text ??
+      // Captions on media
+      message?.imageMessage?.caption ??
+      message?.videoMessage?.caption ??
+      message?.documentMessage?.caption ??
+      // Interactive replies
+      message?.buttonsResponseMessage?.selectedDisplayText ??
+      message?.listResponseMessage?.title ??
+      // Fallback: sometimes Baileys packs a single-key object
+      (typeof message === 'object' && message && Object.values(message)[0] && (Object.values(message)[0] as any)?.text);
+
+    if (text) return { type: 'text', text };
+
+    return { type: 'unknown' };
+  }
+
   private convertWAMessageToInbound(waMessage: WAMessage): InboundMessage | null {
     try {
       if (!waMessage.key || !waMessage.key.remoteJid || !waMessage.messageTimestamp) {
@@ -58,33 +95,8 @@ export class WhatsAppClient {
       const from = waMessage.key.remoteJid
       const chatId = waMessage.key.remoteJid
       
-      // Determine message type and extract content
-      let messageType: MessageType = 'unknown'
-      let text: string | undefined
-      let mediaUrl: string | undefined
-
-      if (waMessage.message) {
-        if (waMessage.message.conversation) {
-          messageType = 'text'
-          text = waMessage.message.conversation
-        } else if (waMessage.message.extendedTextMessage) {
-          messageType = 'text'
-          text = waMessage.message.extendedTextMessage.text || undefined
-        } else if (waMessage.message.imageMessage) {
-          messageType = 'image'
-          text = waMessage.message.imageMessage.caption || undefined
-        } else if (waMessage.message.videoMessage) {
-          messageType = 'video'
-          text = waMessage.message.videoMessage.caption || undefined
-        } else if (waMessage.message.audioMessage) {
-          messageType = 'audio'
-        } else if (waMessage.message.documentMessage) {
-          messageType = 'document'
-          text = waMessage.message.documentMessage.caption || undefined
-        } else if (waMessage.message.stickerMessage) {
-          messageType = 'sticker'
-        }
-      }
+      // Extract message type and text using improved logic
+      const { type, text } = this.extractTextAndType(waMessage);
 
       // Create dedupe key based on message ID and timestamp
       const dedupeKey = `${messageId}-${timestamp}`
@@ -96,7 +108,7 @@ export class WhatsAppClient {
         from,
         to: this.socket?.user?.id || 'unknown',
         chatId,
-        type: messageType,
+        type,
         dedupeKey,
         conversationKey,
         metadata: {
@@ -106,8 +118,10 @@ export class WhatsAppClient {
         }
       }
 
-      if (text) result.text = text
-      if (mediaUrl) result.mediaUrl = mediaUrl
+      // Only add text field if we have text content
+      if (text) {
+        result.text = text;
+      }
 
       return result
     } catch (err) {

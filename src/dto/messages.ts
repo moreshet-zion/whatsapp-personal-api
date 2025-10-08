@@ -1,4 +1,4 @@
-export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'unknown'
+export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'reaction' | 'unknown'
 
 export interface InboundMessage {
   id: string
