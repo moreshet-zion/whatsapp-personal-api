@@ -88,9 +88,11 @@ export class WhatsAppClient {
         return null
       }
 
+      this.logger.info({ evt: 'baileys_inbound_raw', message: waMessage }, 'Received inbound Baileys message')
+
       const messageId = waMessage.key.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const timestamp = typeof waMessage.messageTimestamp === 'number' 
-        ? waMessage.messageTimestamp * 1000 
+      const timestamp = typeof waMessage.messageTimestamp === 'number'
+        ? waMessage.messageTimestamp * 1000
         : parseInt(waMessage.messageTimestamp.toString()) * 1000
       const from = waMessage.key.remoteJid
       const chatId = waMessage.key.remoteJid
@@ -122,6 +124,8 @@ export class WhatsAppClient {
       if (text) {
         result.text = text;
       }
+
+      this.logger.info({ evt: 'baileys_inbound_converted', message: result }, 'Converted inbound message for recording')
 
       return result
     } catch (err) {
