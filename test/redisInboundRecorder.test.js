@@ -74,8 +74,16 @@ test('RedisInboundRecorder stores payload and text field', async () => {
   assert.equal(payload.text, 'Hello from WhatsApp')
 
   // Ensure the text field is also stored separately for easier consumption
-  const textIndex = args.indexOf('text')
-  assert.ok(textIndex !== -1)
+  // Find the 'text' field that contains the actual message content
+  // Start from index 5 where the field-value pairs begin (after MAXLEN params)
+  let textIndex = -1
+  for (let i = 5; i < args.length - 1; i += 2) {
+    if (args[i] === 'text' && args[i + 1] === 'Hello from WhatsApp') {
+      textIndex = i
+      break
+    }
+  }
+  assert.ok(textIndex !== -1, 'text field with message content should be present in Redis stream')
   assert.equal(args[textIndex + 1], 'Hello from WhatsApp')
 
   // Hash index should include the text for quick lookups
