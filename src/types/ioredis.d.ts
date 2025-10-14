@@ -11,7 +11,7 @@ declare module 'ioredis' {
     ping(): Promise<string>
     set(key: string, value: string, mode: 'EX', seconds: number, condition: 'NX'): Promise<'OK' | null>
     del(key: string): Promise<number>
-    xadd(stream: string, maxlen: string, type: string, limit: string, id: string, field: string, value: string): Promise<string>
+    xadd(stream: string, ...args: Array<string | number>): Promise<string>
     hset(key: string, data: Record<string, string>): Promise<number>
     exists(key: string): Promise<number>
     get(key: string): Promise<string | null>
