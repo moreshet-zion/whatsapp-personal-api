@@ -27,8 +27,16 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
     this.redis = redisUrl
       ? new IORedis(redisUrl, {
           lazyConnect: true,
-          maxRetriesPerRequest: null
-        })
+          maxRetriesPerRequest: null,
+          enableOfflineQueue: false, // Don't queue commands when offline to prevent memory buildup
+          retryStrategy: (times: number) => {
+            // Stop retrying after 3 attempts to avoid memory issues
+            if (times > 3) {
+              return null;
+            }
+            return Math.min(times * 1000, 3000);
+          }
+        } as any) // Cast to any to support all ioredis options
       : undefined;
     
     this.isRedisConfigured = Boolean(redisUrl);

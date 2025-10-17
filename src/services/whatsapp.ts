@@ -20,6 +20,7 @@ export class WhatsAppClient {
   private readonly sessionDir: string
   private readonly logger = pino({ level: process.env.LOG_LEVEL || 'info' })
   private messageHandler: ((message: InboundMessage) => void) | null = null
+  private eventHandlers: Map<string, any> = new Map()
 
   constructor(sessionDir = path.resolve(process.cwd(), 'sessions')) {
     this.sessionDir = sessionDir
@@ -158,9 +159,10 @@ export class WhatsAppClient {
 
     this.status = this.socket.user ? 'connected' : 'disconnected'
 
-    this.socket.ev.on('creds.update', saveCreds)
-
-    this.socket.ev.on('connection.update', async (update) => {
+    // Store event handlers so we can remove them on cleanup
+    const credsUpdateHandler = saveCreds
+    
+    const connectionUpdateHandler = async (update: any) => {
       const { connection, lastDisconnect, qr } = update
 
       if (qr) {
@@ -184,10 +186,9 @@ export class WhatsAppClient {
           }, 1000)
         }
       }
-    })
-
-    // Listen for incoming messages
-    this.socket.ev.on('messages.upsert', async (messageUpdate) => {
+    }
+    
+    const messagesUpsertHandler = async (messageUpdate: any) => {
       if (!this.messageHandler) return
 
       for (const waMessage of messageUpdate.messages) {
@@ -204,13 +205,46 @@ export class WhatsAppClient {
           }
         }
       }
-    })
+    }
+
+    // Register event handlers
+    this.socket.ev.on('creds.update', credsUpdateHandler)
+    this.socket.ev.on('connection.update', connectionUpdateHandler)
+    this.socket.ev.on('messages.upsert', messagesUpsertHandler)
+    
+    // Store handlers for cleanup
+    this.eventHandlers.set('creds.update', credsUpdateHandler)
+    this.eventHandlers.set('connection.update', connectionUpdateHandler)
+    this.eventHandlers.set('messages.upsert', messagesUpsertHandler)
+  }
+
+  private cleanupEventHandlers(): void {
+    if (this.socket && this.eventHandlers.size > 0) {
+      this.logger.info({ handlerCount: this.eventHandlers.size }, 'Cleaning up event handlers')
+      
+      // Remove all registered event listeners
+      this.eventHandlers.forEach((handler, eventName) => {
+        try {
+          this.socket?.ev.off(eventName as any, handler)
+        } catch (err) {
+          this.logger.warn({ err, eventName }, 'Failed to remove event handler')
+        }
+      })
+      
+      this.eventHandlers.clear()
+    }
   }
 
   public async restart(): Promise<void> {
     try {
+      // Clean up event handlers before ending socket
+      this.cleanupEventHandlers()
+      
       await this.socket?.end?.(new Error('manual-restart'))
-    } catch {}
+    } catch (err) {
+      this.logger.warn({ err }, 'Error during restart cleanup')
+    }
+    
     this.socket = null
     this.status = 'disconnected'
     this.qrState = {}

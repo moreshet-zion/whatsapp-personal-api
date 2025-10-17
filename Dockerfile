@@ -42,4 +42,5 @@ COPY --from=build /app /app
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-CMD [ "npm", "run", "start" ]
+# Set Node.js max memory to 384MB (leaving headroom for system and buffers)
+CMD [ "node", "--max-old-space-size=384", "dist/server.js" ]
