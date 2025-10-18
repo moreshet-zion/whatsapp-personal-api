@@ -57,6 +57,22 @@ app.get('/health', (req, res) => {
 
 app.get('/health/redis', createRedisHealthHandler(redis))
 
+// Memory usage endpoint for monitoring
+app.get('/health/memory', (req, res) => {
+  const used = process.memoryUsage()
+  const formatMB = (bytes: number) => `${Math.round(bytes / 1024 / 1024)} MB`
+  
+  res.json({
+    rss: formatMB(used.rss),
+    heapTotal: formatMB(used.heapTotal),
+    heapUsed: formatMB(used.heapUsed),
+    external: formatMB(used.external),
+    arrayBuffers: formatMB(used.arrayBuffers),
+    uptime: process.uptime(),
+    uptimeFormatted: `${Math.floor(process.uptime() / 3600)}h ${Math.floor((process.uptime() % 3600) / 60)}m`,
+  })
+})
+
 // QR endpoint
 app.get('/qr', async (req, res) => {
   if (whatsappClient.getConnectionStatus() === 'connected') {
@@ -682,6 +698,19 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     logger.info(`Server listening on http://localhost:${PORT}`)
   })
+  
+  // Periodic memory usage logging for monitoring
+  setInterval(() => {
+    const used = process.memoryUsage()
+    logger.info({
+      evt: 'memory_usage',
+      rss_mb: Math.round(used.rss / 1024 / 1024),
+      heap_used_mb: Math.round(used.heapUsed / 1024 / 1024),
+      heap_total_mb: Math.round(used.heapTotal / 1024 / 1024),
+      external_mb: Math.round(used.external / 1024 / 1024),
+      uptime_hours: Math.round(process.uptime() / 3600 * 10) / 10
+    }, 'Memory usage snapshot')
+  }, 5 * 60 * 1000) // Log every 5 minutes
 }
 
 
