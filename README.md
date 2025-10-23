@@ -5,6 +5,7 @@ A comprehensive WhatsApp API server with advanced scheduling, pub/sub messaging,
 ## ✨ Features
 
 - 📱 **Instant Messaging**: Send immediate messages to individuals and groups
+- 🤖 **AI Agent**: OpenAI-powered chatbot with custom personas and automatic responses
 - ⏰ **Smart Scheduling**: Cron-based recurring and date-based one-time messages  
 - 📣 **Pub/Sub System**: Broadcast messages to multiple subscribers with topics
 - 👥 **Group Support**: Full WhatsApp group messaging capabilities
@@ -67,6 +68,14 @@ Configure comma‑separated keys via `API_TOKENS`.
 
 ### Messaging
 - `POST /send` — Send immediate messages to individuals or groups
+
+### AI Agent
+- `GET /agent` — Get agent configuration and status
+- `PUT /agent` — Update agent configuration
+- `POST /agent/enable` — Enable the AI agent
+- `POST /agent/disable` — Disable the AI agent
+- `DELETE /agent/context/{chatId}` — Clear conversation context
+- `DELETE /agent/contexts` — Clear all conversation contexts
 
 ### Scheduled Messages  
 - `GET /scheduled` — List with filtering options
@@ -155,6 +164,29 @@ curl -sS http://localhost:8080/health/redis | jq
   - If not set, Redis-dependent features gracefully return 503 errors
 
 ## 💡 Usage Examples
+
+### AI Agent Quick Setup
+
+```bash
+# 1. Set your OpenAI API key
+echo 'OPENAI_API_KEY=sk-proj-...' >> .env
+
+# 2. Configure and enable the agent
+curl -X PUT http://localhost:3000/agent \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: <API_KEY>" \
+  -d '{
+    "enabled": true,
+    "persona": "You are a helpful AI assistant. Be friendly and concise.",
+    "model": "gpt-4o-mini"
+  }'
+
+# 3. Send a WhatsApp message to your connected number and get an AI response!
+```
+
+📖 **Learn More**: See [AI Agent Guide](docs/AI_AGENT_GUIDE.md) and [Quick Start](AI_AGENT_QUICK_START.md)
+
+---
 
 Send immediate message
 ```bash
@@ -271,10 +303,12 @@ docker run -p 3000:8080 \
 
 ### Quick Start
 - 🚀 **[Getting Started](docs/GETTING_STARTED.md)** - Setup and first steps
+- 🤖 **[AI Agent Quick Start](AI_AGENT_QUICK_START.md)** - Set up AI assistant in 3 steps
 - 📋 **[API Reference](docs/API_REFERENCE.md)** - Complete endpoint documentation
 - 🧪 **[Test Calls](docs/TEST_CALLS.md)** - curl examples and testing
 
 ### Feature Guides  
+- 🤖 **[AI Agent Guide](docs/AI_AGENT_GUIDE.md)** - Complete AI assistant setup and configuration
 - ⏰ **[Scheduling Guide](docs/SCHEDULING_GUIDE.md)** - Master cron and date-based scheduling
 - 📣 **[Pub/Sub Guide](docs/PUBSUB_GUIDE.md)** - Broadcasting and topic management
 - 👥 **[Group Messaging](docs/GROUP_MESSAGING.md)** - Send to WhatsApp groups

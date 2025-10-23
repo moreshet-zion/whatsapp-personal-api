@@ -5,7 +5,27 @@ import pino from 'pino';
 import { RecorderSettings } from './sentMessageRecorder.js';
 
 const settingsSchema = z.object({
-  history_backend: z.enum(['redis', 'base44']).default('redis')
+  history_backend: z.enum(['redis', 'base44']).default('redis'),
+  agent: z.object({
+    enabled: z.boolean().default(false),
+    openaiApiKey: z.string().optional(),
+    model: z.string().default('gpt-4o-mini'),
+    persona: z.string().default('You are a helpful AI assistant responding to WhatsApp messages. Be friendly, concise, and helpful.'),
+    temperature: z.number().min(0).max(2).default(0.7),
+    maxTokens: z.number().min(1).max(4096).default(500),
+    autoReply: z.boolean().default(true),
+    whitelistedNumbers: z.array(z.string()).default([]),
+    conversationContextLimit: z.number().min(1).max(50).default(10)
+  }).default({
+    enabled: false,
+    model: 'gpt-4o-mini',
+    persona: 'You are a helpful AI assistant responding to WhatsApp messages. Be friendly, concise, and helpful.',
+    temperature: 0.7,
+    maxTokens: 500,
+    autoReply: true,
+    whitelistedNumbers: [],
+    conversationContextLimit: 10
+  })
 });
 
 export type AppSettings = z.infer<typeof settingsSchema>;
@@ -36,7 +56,17 @@ export class SettingsService {
     
     // Default settings
     const defaultSettings: AppSettings = {
-      history_backend: 'redis'
+      history_backend: 'redis',
+      agent: {
+        enabled: false,
+        model: 'gpt-4o-mini',
+        persona: 'You are a helpful AI assistant responding to WhatsApp messages. Be friendly, concise, and helpful.',
+        temperature: 0.7,
+        maxTokens: 500,
+        autoReply: true,
+        whitelistedNumbers: [],
+        conversationContextLimit: 10
+      }
     };
     
     this.saveSettings(defaultSettings);
