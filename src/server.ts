@@ -12,6 +12,7 @@ import { redis } from './infra/redis.js'
 import { createRedisHealthHandler } from './routes/redisHealth.js'
 import { SettingsService } from './services/settingsService.js'
 import { MessageRecordingService } from './services/messageRecordingService.js'
+import { AgentService, type AgentConfig } from './services/agentService.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
 
@@ -30,15 +31,54 @@ const PORT = Number(process.env.PORT || 3000)
 const whatsappClient = new WhatsAppClient(sessionsDir)
 const settingsService = new SettingsService(dataDir)
 const messageRecording = new MessageRecordingService(settingsService)
+const agentService = new AgentService(settingsService.getSettings().agent)
 const scheduler = new SchedulerService(dataDir, whatsappClient, messageRecording)
 const pubSub = new PubSubService(dataDir, whatsappClient, messageRecording)
 
-// Set up inbound message handler for recording
+// Set up inbound message handler for recording and AI agent
 whatsappClient.setMessageHandler(async (message) => {
   try {
+    // Record inbound message
     await messageRecording.recordInbound(message)
+    
+    // Process with AI agent if enabled
+    if (agentService.isEnabled()) {
+      const response = await agentService.processMessage(message)
+      
+      if (response && agentService.getConfig().autoReply) {
+        // Send AI response back to the user
+        const sock = whatsappClient.getSocket()
+        if (sock && whatsappClient.getConnectionStatus() === 'connected') {
+          try {
+            const result = await sock.sendMessage(message.chatId, { text: response })
+            logger.info({ 
+              chatId: message.chatId, 
+              messageId: result?.key?.id 
+            }, 'Sent AI agent response')
+            
+            // Record the sent AI response
+            try {
+              const rec = {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                ts: Date.now(),
+                to: message.from,
+                chatId: message.chatId,
+                via: 'text' as const,
+                bodyPreview: response.slice(0, 120),
+                ...(result?.key?.id && { waMessageId: result.key.id })
+              }
+              await messageRecording.recordSent(rec)
+            } catch (err) {
+              logger.error({ err }, 'Failed to record AI agent sent message')
+            }
+          } catch (err) {
+            logger.error({ err, chatId: message.chatId }, 'Failed to send AI agent response')
+          }
+        }
+      }
+    }
   } catch (err) {
-    logger.error({ err, messageId: message.id }, 'Failed to record inbound message')
+    logger.error({ err, messageId: message.id }, 'Failed to process inbound message')
   }
 })
 
@@ -647,7 +687,18 @@ app.get('/settings', (req, res) => {
 })
 
 const updateSettingsSchema = z.object({
-  history_backend: z.enum(['redis', 'base44']).optional()
+  history_backend: z.enum(['redis', 'base44']).optional(),
+  agent: z.object({
+    enabled: z.boolean().optional(),
+    openaiApiKey: z.string().optional(),
+    model: z.string().optional(),
+    persona: z.string().optional(),
+    temperature: z.number().min(0).max(2).optional(),
+    maxTokens: z.number().min(1).max(4096).optional(),
+    autoReply: z.boolean().optional(),
+    whitelistedNumbers: z.array(z.string()).optional(),
+    conversationContextLimit: z.number().min(1).max(50).optional()
+  }).optional()
 })
 
 app.put('/settings', (req, res) => {
@@ -660,6 +711,34 @@ app.put('/settings', (req, res) => {
     const updates: any = {}
     if (parse.data.history_backend !== undefined) {
       updates.history_backend = parse.data.history_backend
+    }
+    if (parse.data.agent !== undefined) {
+      const currentAgent = settingsService.getSettings().agent
+      // Merge with current agent settings, ensuring all required fields are present
+      const mergedAgent = {
+        enabled: parse.data.agent.enabled ?? currentAgent.enabled,
+        openaiApiKey: parse.data.agent.openaiApiKey ?? currentAgent.openaiApiKey,
+        model: parse.data.agent.model ?? currentAgent.model,
+        persona: parse.data.agent.persona ?? currentAgent.persona,
+        temperature: parse.data.agent.temperature ?? currentAgent.temperature,
+        maxTokens: parse.data.agent.maxTokens ?? currentAgent.maxTokens,
+        autoReply: parse.data.agent.autoReply ?? currentAgent.autoReply,
+        whitelistedNumbers: parse.data.agent.whitelistedNumbers ?? currentAgent.whitelistedNumbers,
+        conversationContextLimit: parse.data.agent.conversationContextLimit ?? currentAgent.conversationContextLimit
+      }
+      updates.agent = mergedAgent
+      // Update agent service config with only defined fields from request
+      const configUpdates: Partial<AgentConfig> = {}
+      if (parse.data.agent.enabled !== undefined) configUpdates.enabled = parse.data.agent.enabled
+      if (parse.data.agent.openaiApiKey !== undefined) configUpdates.openaiApiKey = parse.data.agent.openaiApiKey
+      if (parse.data.agent.model !== undefined) configUpdates.model = parse.data.agent.model
+      if (parse.data.agent.persona !== undefined) configUpdates.persona = parse.data.agent.persona
+      if (parse.data.agent.temperature !== undefined) configUpdates.temperature = parse.data.agent.temperature
+      if (parse.data.agent.maxTokens !== undefined) configUpdates.maxTokens = parse.data.agent.maxTokens
+      if (parse.data.agent.autoReply !== undefined) configUpdates.autoReply = parse.data.agent.autoReply
+      if (parse.data.agent.whitelistedNumbers !== undefined) configUpdates.whitelistedNumbers = parse.data.agent.whitelistedNumbers
+      if (parse.data.agent.conversationContextLimit !== undefined) configUpdates.conversationContextLimit = parse.data.agent.conversationContextLimit
+      agentService.updateConfig(configUpdates)
     }
     const updatedSettings = settingsService.updateSettings(updates)
     res.json({ success: true, message: 'Settings updated', settings: updatedSettings })
@@ -677,6 +756,172 @@ app.get('/settings/recording-status', async (req, res) => {
   } catch (err) {
     logger.error({ err }, 'Failed to get recording status')
     res.status(500).json({ success: false, error: 'Failed to get recording status' })
+  }
+})
+
+// AI Agent endpoints
+app.get('/agent', (req, res) => {
+  try {
+    const config = agentService.getConfig()
+    // Don't expose API key in response
+    const safeConfig = { ...config, openaiApiKey: config.openaiApiKey ? '***' : undefined }
+    res.json({ 
+      success: true, 
+      agent: safeConfig,
+      contextCount: agentService.getContextCount(),
+      isEnabled: agentService.isEnabled()
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get agent config')
+    res.status(500).json({ success: false, error: 'Failed to get agent configuration' })
+  }
+})
+
+const updateAgentSchema = z.object({
+  enabled: z.boolean().optional(),
+  openaiApiKey: z.string().optional(),
+  model: z.string().optional(),
+  persona: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().min(1).max(4096).optional(),
+  autoReply: z.boolean().optional(),
+  whitelistedNumbers: z.array(z.string()).optional(),
+  conversationContextLimit: z.number().min(1).max(50).optional()
+})
+
+app.put('/agent', (req, res) => {
+  const parse = updateAgentSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid agent configuration', details: parse.error.issues })
+  }
+  
+  try {
+    // Update settings service
+    const currentSettings = settingsService.getSettings()
+    const currentAgent = currentSettings.agent
+    // Merge with current agent settings, ensuring all required fields are present
+    const updatedAgent: AgentConfig = {
+      enabled: parse.data.enabled ?? currentAgent.enabled,
+      openaiApiKey: parse.data.openaiApiKey ?? currentAgent.openaiApiKey,
+      model: parse.data.model ?? currentAgent.model,
+      persona: parse.data.persona ?? currentAgent.persona,
+      temperature: parse.data.temperature ?? currentAgent.temperature,
+      maxTokens: parse.data.maxTokens ?? currentAgent.maxTokens,
+      autoReply: parse.data.autoReply ?? currentAgent.autoReply,
+      whitelistedNumbers: parse.data.whitelistedNumbers ?? currentAgent.whitelistedNumbers,
+      conversationContextLimit: parse.data.conversationContextLimit ?? currentAgent.conversationContextLimit
+    }
+    settingsService.updateSettings({ agent: updatedAgent })
+    
+    // Update agent service with only defined fields
+    const configUpdates: Partial<AgentConfig> = {}
+    if (parse.data.enabled !== undefined) configUpdates.enabled = parse.data.enabled
+    if (parse.data.openaiApiKey !== undefined) configUpdates.openaiApiKey = parse.data.openaiApiKey
+    if (parse.data.model !== undefined) configUpdates.model = parse.data.model
+    if (parse.data.persona !== undefined) configUpdates.persona = parse.data.persona
+    if (parse.data.temperature !== undefined) configUpdates.temperature = parse.data.temperature
+    if (parse.data.maxTokens !== undefined) configUpdates.maxTokens = parse.data.maxTokens
+    if (parse.data.autoReply !== undefined) configUpdates.autoReply = parse.data.autoReply
+    if (parse.data.whitelistedNumbers !== undefined) configUpdates.whitelistedNumbers = parse.data.whitelistedNumbers
+    if (parse.data.conversationContextLimit !== undefined) configUpdates.conversationContextLimit = parse.data.conversationContextLimit
+    agentService.updateConfig(configUpdates)
+    
+    const config = agentService.getConfig()
+    const safeConfig = { ...config, openaiApiKey: config.openaiApiKey ? '***' : undefined }
+    
+    res.json({ 
+      success: true, 
+      message: 'Agent configuration updated', 
+      agent: safeConfig 
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to update agent config')
+    const message = err instanceof Error ? err.message : 'Failed to update agent configuration'
+    res.status(400).json({ success: false, error: message })
+  }
+})
+
+app.post('/agent/enable', (req, res) => {
+  try {
+    const currentSettings = settingsService.getSettings()
+    const updatedAgent = { ...currentSettings.agent, enabled: true }
+    settingsService.updateSettings({ agent: updatedAgent })
+    agentService.updateConfig({ enabled: true })
+    
+    res.json({ 
+      success: true, 
+      message: 'AI agent enabled',
+      isEnabled: agentService.isEnabled()
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to enable agent')
+    res.status(500).json({ success: false, error: 'Failed to enable agent' })
+  }
+})
+
+app.post('/agent/disable', (req, res) => {
+  try {
+    const currentSettings = settingsService.getSettings()
+    const updatedAgent = { ...currentSettings.agent, enabled: false }
+    settingsService.updateSettings({ agent: updatedAgent })
+    agentService.updateConfig({ enabled: false })
+    
+    res.json({ 
+      success: true, 
+      message: 'AI agent disabled',
+      isEnabled: agentService.isEnabled()
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to disable agent')
+    res.status(500).json({ success: false, error: 'Failed to disable agent' })
+  }
+})
+
+app.delete('/agent/context/:chatId', (req, res) => {
+  try {
+    const cleared = agentService.clearContext(req.params.chatId)
+    if (!cleared) {
+      return res.status(404).json({ success: false, error: 'No conversation context found for this chat' })
+    }
+    res.json({ success: true, message: 'Conversation context cleared' })
+  } catch (err) {
+    logger.error({ err, chatId: req.params.chatId }, 'Failed to clear context')
+    res.status(500).json({ success: false, error: 'Failed to clear conversation context' })
+  }
+})
+
+app.delete('/agent/contexts', (req, res) => {
+  try {
+    agentService.clearAllContexts()
+    res.json({ success: true, message: 'All conversation contexts cleared' })
+  } catch (err) {
+    logger.error({ err }, 'Failed to clear all contexts')
+    res.status(500).json({ success: false, error: 'Failed to clear contexts' })
+  }
+})
+
+app.get('/agent/contexts', (req, res) => {
+  try {
+    res.json({ 
+      success: true, 
+      contextCount: agentService.getContextCount()
+    })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get context count')
+    res.status(500).json({ success: false, error: 'Failed to get context count' })
+  }
+})
+
+app.get('/agent/context/:chatId', (req, res) => {
+  try {
+    const context = agentService.getConversationHistory(req.params.chatId)
+    if (!context) {
+      return res.status(404).json({ success: false, error: 'No conversation context found for this chat' })
+    }
+    res.json({ success: true, context })
+  } catch (err) {
+    logger.error({ err, chatId: req.params.chatId }, 'Failed to get context')
+    res.status(500).json({ success: false, error: 'Failed to get conversation context' })
   }
 })
 
