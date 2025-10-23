@@ -21,6 +21,8 @@ export class WhatsAppClient {
   private readonly logger = pino({ level: process.env.LOG_LEVEL || 'info' })
   private messageHandler: ((message: InboundMessage) => void) | null = null
   private eventHandlers: Map<string, any> = new Map()
+  private reconnectAttempts: number = 0
+  private maxReconnectAttempts: number = 10
 
   constructor(sessionDir = path.resolve(process.cwd(), 'sessions')) {
     this.sessionDir = sessionDir
@@ -154,7 +156,17 @@ export class WhatsAppClient {
       printQRInTerminal: false,
       browser: Browsers.macOS('Safari'),
       logger: pino({ level: 'warn' }),
-      syncFullHistory: false
+      syncFullHistory: false,
+      // CRITICAL: Keep connection alive to prevent 405 errors
+      keepAliveIntervalMs: 60000, // Send keepalive ping every 60 seconds
+      // Timeout configurations to prevent hanging connections
+      connectTimeoutMs: 60000, // 60 second connection timeout
+      defaultQueryTimeoutMs: 60000, // 60 second query timeout
+      retryRequestDelayMs: 1000, // 1 second delay between retries
+      // Message configuration for better reliability
+      markOnlineOnConnect: true,
+      // getMessage can be added here if you want to handle message history
+      // getMessage: async (key) => { ... }
     })
 
     this.status = this.socket.user ? 'connected' : 'disconnected'
@@ -174,16 +186,43 @@ export class WhatsAppClient {
       if (connection === 'open') {
         this.status = 'connected'
         this.qrState = {}
-        this.logger.info('WhatsApp connected')
+        this.reconnectAttempts = 0 // Reset reconnect attempts on successful connection
+        this.logger.info('WhatsApp connected successfully')
       } else if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut
         this.status = 'disconnected'
-        this.logger.warn({ statusCode }, 'WhatsApp connection closed')
-        if (shouldReconnect) {
+        
+        // Enhanced logging for debugging
+        this.logger.warn({ 
+          statusCode, 
+          shouldReconnect,
+          reconnectAttempts: this.reconnectAttempts,
+          errorMessage: lastDisconnect?.error?.message,
+          errorStack: lastDisconnect?.error?.stack
+        }, 'WhatsApp connection closed')
+        
+        if (shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++
+          
+          // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 60s (max)
+          const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 60000)
+          
+          this.logger.info({ 
+            delay, 
+            attempt: this.reconnectAttempts, 
+            maxAttempts: this.maxReconnectAttempts 
+          }, 'Scheduling reconnection with exponential backoff')
+          
           setTimeout(() => {
-            this.start().catch((err) => this.logger.error({ err }, 'Reconnection failed'))
-          }, 1000)
+            this.start().catch((err) => {
+              this.logger.error({ err, attempt: this.reconnectAttempts }, 'Reconnection failed')
+            })
+          }, delay)
+        } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          this.logger.error('Max reconnection attempts reached. Manual intervention required.')
+        } else {
+          this.logger.info({ statusCode }, 'Not reconnecting (logged out or permanent error)')
         }
       }
     }
