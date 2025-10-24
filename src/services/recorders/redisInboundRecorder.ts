@@ -16,9 +16,15 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
   private readonly redis: IORedis | undefined;
   private readonly isRedisConfigured: boolean;
 
-  constructor() {
+  constructor(client?: IORedis) {
+    if (client) {
+      this.redis = client;
+      this.isRedisConfigured = true;
+      return;
+    }
+
     const redisUrl = process.env.REDIS_URL;
-    
+
     // Validate Redis URL format if provided
     if (redisUrl && !validateRedisUrl(redisUrl)) {
       console.warn(`Warning: REDIS_URL appears to be invalid: ${redisUrl}`);
@@ -38,7 +44,7 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
           }
         } as any) // Cast to any to support all ioredis options
       : undefined;
-    
+
     this.isRedisConfigured = Boolean(redisUrl);
   }
 
@@ -57,9 +63,42 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
       return existingId || 'duplicate';
     }
     
-    const json = JSON.stringify(message);
+    const payload = JSON.stringify({
+      ...message,
+      metadata: message.metadata || undefined
+    });
+
+    const streamFields: string[] = [
+      'payload', payload,
+      'id', message.id,
+      'ts', String(message.ts),
+      'from', message.from,
+      'to', message.to,
+      'chatId', message.chatId,
+      'type', message.type,
+      'dedupeKey', message.dedupeKey,
+      'conversationKey', message.conversationKey
+    ];
+
+    if (message.text) {
+      streamFields.push('text', message.text);
+    }
+
+    if (message.mediaUrl) {
+      streamFields.push('mediaUrl', message.mediaUrl);
+    }
+
+    if (message.metadata) {
+      streamFields.push('metadata', JSON.stringify(message.metadata));
+    }
+
     const streamId = await this.redis.xadd(
-      STREAM_INBOUND, 'MAXLEN', '~', ROUTING_MAXLEN.toString(), '*', 'v', json
+      STREAM_INBOUND,
+      'MAXLEN',
+      '~',
+      ROUTING_MAXLEN.toString(),
+      '*',
+      ...streamFields
     );
     
     // Store deduplication key with TTL
@@ -67,16 +106,30 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
     
     // Create index entry for quick lookups
     const idxKey = `inbound:index:${message.id}`;
-    await this.redis.hset(idxKey, {
-      ts: String(message.ts), 
-      from: message.from, 
+    const indexData: Record<string, string> = {
+      ts: String(message.ts),
+      from: message.from,
       to: message.to,
       chatId: message.chatId,
       type: message.type,
       conversationKey: message.conversationKey,
       dedupeKey: message.dedupeKey,
       streamId: streamId
-    });
+    };
+
+    if (message.text) {
+      indexData.text = message.text;
+    }
+
+    if (message.mediaUrl) {
+      indexData.mediaUrl = message.mediaUrl;
+    }
+
+    if (message.metadata) {
+      indexData.metadata = JSON.stringify(message.metadata);
+    }
+
+    await this.redis.hset(idxKey, indexData);
     
     // Set TTL on index entry
     await this.redis.expire(idxKey, DEDUPE_TTL_SEC);
