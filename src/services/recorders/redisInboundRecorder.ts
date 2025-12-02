@@ -97,6 +97,61 @@ export class RedisInboundRecorder implements InboundMessageRecorder {
     }
   }
 
+  async getConversationHistory(conversationKey: string, beforeTimestamp?: number, maxMessages: number = 50): Promise<InboundMessage[]> {
+    if (!this.redis) {
+      return [];
+    }
+
+    try {
+      // Read messages from the stream in reverse order (newest first)
+      // We'll read more than maxMessages to account for filtering
+      const readCount = maxMessages * 2; // Read extra to account for filtering
+      const messages = await this.redis.xrevrange(STREAM_INBOUND, '+', '-', 'COUNT', readCount);
+
+      const result: InboundMessage[] = [];
+      const cutoffTimestamp = beforeTimestamp || Date.now();
+      
+      for (const [streamId, fields] of messages) {
+        if (result.length >= maxMessages) {
+          break;
+        }
+
+        // Extract the message JSON from the stream
+        const messageJson = fields.find(([key]) => key === 'v')?.[1];
+        if (!messageJson) {
+          continue;
+        }
+
+        try {
+          const message: InboundMessage = JSON.parse(messageJson);
+          
+          // Filter by conversationKey
+          if (message.conversationKey !== conversationKey) {
+            continue;
+          }
+
+          // Filter by timestamp (only include messages before the cutoff)
+          if (message.ts >= cutoffTimestamp) {
+            continue;
+          }
+
+          result.push(message);
+        } catch (err) {
+          // Skip invalid JSON messages
+          continue;
+        }
+      }
+
+      // Sort by timestamp ascending (oldest first) for proper conversation flow
+      result.sort((a, b) => a.ts - b.ts);
+
+      return result;
+    } catch (err) {
+      // Return empty array on error rather than throwing
+      return [];
+    }
+  }
+
   getBackendType(): string {
     return 'redis-inbound';
   }

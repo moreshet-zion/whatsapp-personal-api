@@ -34,6 +34,15 @@ export interface InboundMessageRecorder {
   recordInbound(message: InboundMessage): Promise<string>;
 
   /**
+   * Retrieve past messages from the same conversation
+   * @param conversationKey The conversation identifier
+   * @param beforeTimestamp Optional timestamp to get messages before this time
+   * @param maxMessages Maximum number of messages to retrieve
+   * @returns Promise resolving to array of messages
+   */
+  getConversationHistory?(conversationKey: string, beforeTimestamp?: number, maxMessages?: number): Promise<InboundMessage[]>;
+
+  /**
    * Check if the backend is available and healthy
    */
   isHealthy(): Promise<boolean>;

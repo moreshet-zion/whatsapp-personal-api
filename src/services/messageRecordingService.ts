@@ -118,6 +118,42 @@ export class MessageRecordingService {
     }
   }
 
+  public async getConversationHistory(conversationKey: string, beforeTimestamp?: number, maxMessages?: number): Promise<InboundMessage[]> {
+    try {
+      const inboundRecorder = await this.ensureInboundRecorder();
+      
+      if (!inboundRecorder) {
+        this.logger.warn('No inbound message recorder available for history retrieval');
+        return [];
+      }
+
+      // Check if backend is healthy before attempting to retrieve
+      const isHealthy = await inboundRecorder.isHealthy();
+      if (!isHealthy) {
+        this.logger.warn({ backend: inboundRecorder.getBackendType() }, 'Inbound message recorder backend is unhealthy');
+        return [];
+      }
+
+      // Use the getConversationHistory method if available
+      if (inboundRecorder.getConversationHistory) {
+        const messages = await inboundRecorder.getConversationHistory(conversationKey, beforeTimestamp, maxMessages);
+        this.logger.info({ 
+          evt: 'conversation_history_retrieved', 
+          conversationKey,
+          messageCount: messages.length,
+          beforeTimestamp,
+          maxMessages
+        });
+        return messages;
+      }
+
+      return [];
+    } catch (err) {
+      this.logger.error({ err, conversationKey }, 'Failed to retrieve conversation history');
+      return [];
+    }
+  }
+
   public async getBackendStatus(): Promise<{
     backend: string;
     healthy: boolean;

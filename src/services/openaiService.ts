@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import pino from 'pino';
 import { InboundMessage } from '../dto/messages.js';
+import { MessageRecordingService } from './messageRecordingService.js';
 
 export interface OpenAIConfig {
   apiKey?: string | undefined;
@@ -13,14 +14,24 @@ export class OpenAIService {
   private readonly logger = pino({ level: process.env.LOG_LEVEL || 'info' });
   private config: OpenAIConfig;
   private client: OpenAI | null = null;
+  private messageRecordingService: MessageRecordingService | null = null;
+  
+  // Environment variables for context configuration
+  private readonly maxDays = parseInt(process.env.OPENAI_CONTEXT_MAX_DAYS || '3', 10);
+  private readonly maxMessages = parseInt(process.env.OPENAI_CONTEXT_MAX_MESSAGES || '50', 10);
 
-  constructor(config: OpenAIConfig = {}) {
+  constructor(config: OpenAIConfig = {}, messageRecordingService?: MessageRecordingService) {
     this.config = {
       enabled: false,
       model: 'gpt-3.5-turbo',
       ...config
     };
+    this.messageRecordingService = messageRecordingService || null;
     this.initializeClient();
+  }
+
+  public setMessageRecordingService(service: MessageRecordingService): void {
+    this.messageRecordingService = service;
   }
 
   private initializeClient(): void {
@@ -87,16 +98,79 @@ export class OpenAIService {
         return null;
       }
 
-      this.logger.info({ messageId: message.id, query }, 'Processing message with OpenAI');
+      // Build messages array with conversation history
+      const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+
+      // Fetch conversation history if messageRecordingService is available
+      if (this.messageRecordingService && message.conversationKey) {
+        try {
+          // Calculate cutoff timestamp (maxDays ago)
+          const cutoffTimestamp = Date.now() - (this.maxDays * 24 * 60 * 60 * 1000);
+          
+          // Get conversation history (excluding current message)
+          const history = await this.messageRecordingService.getConversationHistory(
+            message.conversationKey,
+            message.ts, // Get messages before current message
+            this.maxMessages
+          );
+
+          // Filter history by time window and format for OpenAI
+          for (const histMessage of history) {
+            // Skip the current message itself (by ID)
+            if (histMessage.id === message.id) {
+              continue;
+            }
+            // Only include messages within the time window
+            if (histMessage.ts < cutoffTimestamp) {
+              continue;
+            }
+
+            // Only include text messages
+            if (histMessage.type !== 'text' || !histMessage.text) {
+              continue;
+            }
+
+            // Determine role based on message direction
+            // If fromMe is true, it's an assistant message (our response)
+            // Otherwise it's a user message
+            const role = histMessage.metadata?.fromMe ? 'assistant' : 'user';
+            
+            // Remove keyword from historical messages if present
+            let content = histMessage.text;
+            if (content.includes(keyword)) {
+              content = content.replace(keyword, '').trim();
+            }
+
+            if (content) {
+              messages.push({ role, content });
+            }
+          }
+
+          this.logger.info({ 
+            messageId: message.id, 
+            historyCount: messages.length,
+            conversationKey: message.conversationKey 
+          }, 'Retrieved conversation history for OpenAI context');
+        } catch (err) {
+          this.logger.warn({ err, messageId: message.id }, 'Failed to retrieve conversation history, proceeding without context');
+        }
+      }
+
+      // Add current user message
+      messages.push({
+        role: 'user',
+        content: query
+      });
+
+      this.logger.info({ 
+        messageId: message.id, 
+        query, 
+        contextMessages: messages.length - 1 
+      }, 'Processing message with OpenAI');
 
       const completion = await this.client.chat.completions.create({
         model: this.config.model || 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'user',
-            content: query
-          }
-        ],
+        messages,
         max_tokens: 500,
         temperature: 0.7
       });
@@ -104,7 +178,11 @@ export class OpenAIService {
       const response = completion.choices[0]?.message?.content;
       
       if (response) {
-        this.logger.info({ messageId: message.id, responseLength: response.length }, 'OpenAI response received');
+        this.logger.info({ 
+          messageId: message.id, 
+          responseLength: response.length,
+          contextMessages: messages.length - 1
+        }, 'OpenAI response received');
         return response;
       }
 
