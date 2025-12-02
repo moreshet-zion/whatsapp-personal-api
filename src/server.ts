@@ -42,7 +42,7 @@ const openaiConfig = settings.openai ? {
   enabled: settings.openai.enabled ?? false,
   model: settings.openai.model ?? 'gpt-3.5-turbo'
 } : {}
-const openaiService = new OpenAIService(openaiConfig)
+const openaiService = new OpenAIService(openaiConfig, messageRecording)
 
 // Set up inbound message handler for recording and OpenAI processing
 whatsappClient.setMessageHandler(async (message) => {
