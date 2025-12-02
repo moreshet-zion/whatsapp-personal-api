@@ -5,7 +5,13 @@ import pino from 'pino';
 import { RecorderSettings } from './sentMessageRecorder.js';
 
 const settingsSchema = z.object({
-  history_backend: z.enum(['redis', 'base44']).default('redis')
+  history_backend: z.enum(['redis', 'base44']).default('redis'),
+  openai: z.object({
+    apiKey: z.string().optional(),
+    keyword: z.string().optional(),
+    enabled: z.boolean().default(false),
+    model: z.string().default('gpt-3.5-turbo')
+  }).optional()
 });
 
 export type AppSettings = z.infer<typeof settingsSchema>;
@@ -36,7 +42,11 @@ export class SettingsService {
     
     // Default settings
     const defaultSettings: AppSettings = {
-      history_backend: 'redis'
+      history_backend: 'redis',
+      openai: {
+        enabled: false,
+        model: 'gpt-3.5-turbo'
+      }
     };
     
     this.saveSettings(defaultSettings);
