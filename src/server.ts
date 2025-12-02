@@ -12,6 +12,7 @@ import { redis } from './infra/redis.js'
 import { createRedisHealthHandler } from './routes/redisHealth.js'
 import { SettingsService } from './services/settingsService.js'
 import { MessageRecordingService } from './services/messageRecordingService.js'
+import { OpenAIService } from './services/openaiService.js'
 
 dotenv.config({ path: process.env.ENV_PATH || '.env' })
 
@@ -33,10 +34,36 @@ const messageRecording = new MessageRecordingService(settingsService)
 const scheduler = new SchedulerService(dataDir, whatsappClient, messageRecording)
 const pubSub = new PubSubService(dataDir, whatsappClient, messageRecording)
 
-// Set up inbound message handler for recording
+// Initialize OpenAI service with settings
+const settings = settingsService.getSettings()
+const openaiConfig = settings.openai ? {
+  apiKey: settings.openai.apiKey,
+  keyword: settings.openai.keyword,
+  enabled: settings.openai.enabled ?? false,
+  model: settings.openai.model ?? 'gpt-3.5-turbo'
+} : {}
+const openaiService = new OpenAIService(openaiConfig)
+
+// Set up inbound message handler for recording and OpenAI processing
 whatsappClient.setMessageHandler(async (message) => {
   try {
     await messageRecording.recordInbound(message)
+    
+    // Check if message should be processed by OpenAI
+    if (openaiService.shouldProcessMessage(message)) {
+      try {
+        const response = await openaiService.processMessage(message)
+        if (response && whatsappClient.getConnectionStatus() === 'connected') {
+          const sock = whatsappClient.getSocket()
+          if (sock) {
+            await sock.sendMessage(message.chatId, { text: response })
+            logger.info({ messageId: message.id, chatId: message.chatId }, 'OpenAI response sent')
+          }
+        }
+      } catch (err) {
+        logger.error({ err, messageId: message.id }, 'Failed to process message with OpenAI')
+      }
+    }
   } catch (err) {
     logger.error({ err, messageId: message.id }, 'Failed to record inbound message')
   }
@@ -647,7 +674,13 @@ app.get('/settings', (req, res) => {
 })
 
 const updateSettingsSchema = z.object({
-  history_backend: z.enum(['redis', 'base44']).optional()
+  history_backend: z.enum(['redis', 'base44']).optional(),
+  openai: z.object({
+    apiKey: z.string().optional(),
+    keyword: z.string().optional(),
+    enabled: z.boolean().optional(),
+    model: z.string().optional()
+  }).optional()
 })
 
 app.put('/settings', (req, res) => {
@@ -660,6 +693,16 @@ app.put('/settings', (req, res) => {
     const updates: any = {}
     if (parse.data.history_backend !== undefined) {
       updates.history_backend = parse.data.history_backend
+    }
+    if (parse.data.openai !== undefined) {
+      updates.openai = parse.data.openai
+      // Sync OpenAI service config
+      const openaiUpdates: Partial<import('./services/openaiService.js').OpenAIConfig> = {}
+      if (parse.data.openai.apiKey !== undefined) openaiUpdates.apiKey = parse.data.openai.apiKey
+      if (parse.data.openai.keyword !== undefined) openaiUpdates.keyword = parse.data.openai.keyword
+      if (parse.data.openai.enabled !== undefined) openaiUpdates.enabled = parse.data.openai.enabled
+      if (parse.data.openai.model !== undefined) openaiUpdates.model = parse.data.openai.model
+      openaiService.updateConfig(openaiUpdates)
     }
     const updatedSettings = settingsService.updateSettings(updates)
     res.json({ success: true, message: 'Settings updated', settings: updatedSettings })
@@ -677,6 +720,66 @@ app.get('/settings/recording-status', async (req, res) => {
   } catch (err) {
     logger.error({ err }, 'Failed to get recording status')
     res.status(500).json({ success: false, error: 'Failed to get recording status' })
+  }
+})
+
+// OpenAI configuration endpoints
+app.get('/openai/config', (req, res) => {
+  try {
+    const config = openaiService.getConfig()
+    // Don't expose the full API key in response for security
+    const safeConfig = {
+      ...config,
+      apiKey: config.apiKey ? '***' + config.apiKey.slice(-4) : undefined
+    }
+    res.json({ success: true, config: safeConfig })
+  } catch (err) {
+    logger.error({ err }, 'Failed to get OpenAI config')
+    res.status(500).json({ success: false, error: 'Failed to get OpenAI config' })
+  }
+})
+
+const updateOpenAIConfigSchema = z.object({
+  apiKey: z.string().optional(),
+  keyword: z.string().optional(),
+  enabled: z.boolean().optional(),
+  model: z.string().optional()
+})
+
+app.put('/openai/config', (req, res) => {
+  const parse = updateOpenAIConfigSchema.safeParse(req.body)
+  if (!parse.success) {
+    return res.status(400).json({ success: false, error: 'Invalid OpenAI config format', details: parse.error.issues })
+  }
+  
+  try {
+    // Update OpenAI service config
+    openaiService.updateConfig(parse.data)
+    
+    // Also update settings service for persistence
+    const currentSettings = settingsService.getSettings()
+    const openaiSettings: any = { ...currentSettings.openai }
+    if (parse.data.apiKey !== undefined) openaiSettings.apiKey = parse.data.apiKey
+    if (parse.data.keyword !== undefined) openaiSettings.keyword = parse.data.keyword
+    if (parse.data.enabled !== undefined) openaiSettings.enabled = parse.data.enabled
+    if (parse.data.model !== undefined) openaiSettings.model = parse.data.model
+    
+    const updatedSettings = settingsService.updateSettings({
+      ...currentSettings,
+      openai: openaiSettings
+    })
+    
+    const config = openaiService.getConfig()
+    const safeConfig = {
+      ...config,
+      apiKey: config.apiKey ? '***' + config.apiKey.slice(-4) : undefined
+    }
+    
+    res.json({ success: true, message: 'OpenAI config updated', config: safeConfig })
+  } catch (err) {
+    logger.error({ err }, 'Failed to update OpenAI config')
+    const message = err instanceof Error ? err.message : 'Failed to update OpenAI config'
+    res.status(400).json({ success: false, error: message })
   }
 })
 
